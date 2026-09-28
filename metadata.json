@@ -1,0 +1,6 @@
+{
+  "name": "SI JAJUL - Puskesmas Kepulauan Seribu Selatan",
+  "description": "SI JAJUL (Sistem Informasi Jaga Stok dan Jalur Logistik Puskesmas Kepulauan Seribu Selatan) - Manajemen stok persediaan, permintaan antar pulau, approval, dropping, BAST, SBBK, dan sinkronisasi Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

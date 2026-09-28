@@ -1,15 +1,32 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  RewriteBase /
 
-  # If dist folder exists, route requests to dist
-  RewriteCond %{DOCUMENT_ROOT}/dist -d
-  RewriteCond %{REQUEST_URI} !^/dist/
+  # Prioritas eksekusi file utama
+  DirectoryIndex index.php dist/index.html index.html
+
+  # Layani file statis yang ada di dist/
+  RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f
   RewriteRule ^(.*)$ /dist/$1 [L]
 
-  # Standard SPA routing fallback
+  # Biarkan index.php berjalan
+  RewriteRule ^index\.php$ - [L]
+
+  # Rute fallback SPA untuk semua URL, arahkan ke index.php
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule ^(.*)$ /index.html [L]
+  RewriteRule . /index.php [L]
 </IfModule>
 
+# Disable directory listing
 Options -Indexes
+
+# MIME types
+<IfModule mod_mime.c>
+  AddType application/javascript js mjs
+  AddType text/css css
+  AddType image/svg+xml svg svgz
+  AddType application/json json
+  AddType font/woff woff
+  AddType font/woff2 woff2
+</IfModule>

@@ -12,9 +12,10 @@ import { PdfService } from '../services/pdfService';
 interface StockViewProps {
   onNavigate: (viewId: string) => void;
   currentUser: User | null;
+  onRefreshStats?: () => void;
 }
 
-export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser }) => {
+export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, onRefreshStats: _onRefreshStats }) => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);

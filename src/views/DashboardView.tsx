@@ -63,7 +63,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, curren
   const monthlyTrxCount = transactions.length;
 
   // Warehouse stocks summary
-  const gudangBesar = warehouses.find(w => w.tipeGudang === 'GUDANG_BESAR') || warehouses[0];
+  const defaultWarehouse: Warehouse = {
+    id: 'GUD-001',
+    kodeGudang: 'GB-KSS',
+    namaGudang: 'Gudang Puskesmas Kepulauan Seribu Selatan',
+    tipeGudang: 'GUDANG_BESAR',
+    parentGudangId: null,
+    picId: 'USR-002',
+    picNama: 'Hendra Setiawan, S.Farm',
+    lokasi: 'Puskesmas Kecamatan Kepulauan Seribu Selatan',
+    statusAktif: true,
+    keterangan: 'Gudang Induk'
+  };
+  const gudangBesar = warehouses.find(w => w.tipeGudang === 'GUDANG_BESAR') || warehouses[0] || defaultWarehouse;
   const subWarehouses = warehouses.filter(w => w.tipeGudang === 'SUB_GUDANG');
 
   const getWarehouseItemCount = (whId: string) => {

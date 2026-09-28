@@ -6,28 +6,34 @@ import { storageService } from '../../services/storageService';
 interface NotificationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  notifications: AppNotification[];
-  onRefresh: () => void;
+  notifications?: AppNotification[];
+  onRefresh?: () => void;
   onNavigate: (viewId: string) => void;
+  onMarkAllRead?: () => void;
 }
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   isOpen,
   onClose,
-  notifications,
+  notifications: propNotifications,
   onRefresh,
-  onNavigate
+  onNavigate,
+  onMarkAllRead
 }) => {
   if (!isOpen) return null;
 
+  const notifications = propNotifications || storageService.getNotifications();
+
   const handleMarkAllRead = () => {
     storageService.markAllNotificationsAsRead();
-    onRefresh();
+    if (onMarkAllRead) onMarkAllRead();
+    if (onRefresh) onRefresh();
   };
 
   const handleItemClick = (notif: AppNotification) => {
     storageService.markNotificationAsRead(notif.id);
-    onRefresh();
+    if (onMarkAllRead) onMarkAllRead();
+    if (onRefresh) onRefresh();
     if (notif.linkTarget) {
       onNavigate(notif.linkTarget);
       onClose();

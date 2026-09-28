@@ -1204,7 +1204,7 @@ export const DEFAULT_NUMBER_CONFIG: NumberFormatConfig = {
 export const DEFAULT_SHEETS_CONFIG: GoogleSheetsConfig = {
   spreadsheetId: '1AbCdEfGhIjKlMnOpQrStUvWxYz_SAMPLE_ID_PUSKESMAS_KSS',
   gasDeploymentUrl: '',
-  autoSync: false,
+  autoSync: true,
   isConnected: false
 };
 

@@ -171,6 +171,14 @@ function setupDatabase() {
       ],
       widths: [110, 150, 160, 120, 140, 130, 160, 280]
     },
+    "USULAN_BARANG": {
+      headers: [
+        "ID Usulan", "Nomor Usulan", "Tanggal", "Nama Barang", "Kategori", 
+        "Jumlah", "Satuan", "Estimasi Total", "Prioritas", "Pemohon", 
+        "Unit Kerja", "Status", "Alasan Usulan"
+      ],
+      widths: [120, 160, 110, 220, 130, 90, 90, 130, 100, 160, 180, 140, 260]
+    },
     "CONFIG_SISTEM": {
       headers: [
         "Kunci Pengaturan (Key)", "Nilai Pengaturan (Value)", "Kategori", "Keterangan Deskripsi", "Terakhir Diperbarui"
@@ -436,6 +444,19 @@ function pushAllDataToSheets(data) {
     syncTable("LOG_AKTIVITAS", lRows);
   }
 
+  // 9. Usulan Barang Baru
+  if (data.proposals && Array.isArray(data.proposals)) {
+    var pRows = data.proposals.map(function(p) {
+      return [
+        p.id || "", p.nomorUsulan || "", p.tanggalUsulan || "", p.namaBarang || "",
+        p.kategoriNama || "", p.jumlahDiusulkan || 0, p.satuan || "", p.estimasiTotalHarga || 0,
+        p.prioritas || "SEDANG", p.pemohonNama || "", p.unitKerja || "", p.status || "DIAJUKAN",
+        p.alasanPengusulan || ""
+      ];
+    });
+    syncTable("USULAN_BARANG", pRows);
+  }
+
   return "✅ Sinkronisasi Berhasil! Seluruh data lokal telah tersimpan rapi ke Google Spreadsheet pada " + 
          new Date().toLocaleString("id-ID", { timeZone: CONFIG.TIMEZONE });
 }
@@ -476,6 +497,7 @@ function pullAllDataFromSheets() {
   result.bast = readTable("DOKUMEN_BAST");
   result.sbbk = readTable("DOKUMEN_SBBK");
   result.logs = readTable("LOG_AKTIVITAS");
+  result.proposals = readTable("USULAN_BARANG");
   result.config = readTable("CONFIG_SISTEM");
 
   return result;
@@ -790,6 +812,26 @@ export class GasService {
     }
   }
 
+  static async syncAllFromSheets(): Promise<{ success: boolean; counts?: any; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    if (!cfg.gasDeploymentUrl) {
+      return {
+        success: false,
+        message: 'URL Web App Google Apps Script belum diisi di menu Pengaturan.'
+      };
+    }
+    const pullResult = await this.pullFromSheets(cfg.gasDeploymentUrl);
+    if (!pullResult.success || !pullResult.data) {
+      return { success: false, message: pullResult.message };
+    }
+    const importRes = storageService.importAllFromSpreadsheet(pullResult.data, true);
+    return {
+      success: importRes.success,
+      counts: importRes.counts,
+      message: importRes.message
+    };
+  }
+
   static async syncUsersFromSheets(): Promise<{ success: boolean; count?: number; message: string }> {
     const cfg = storageService.getSheetsConfig();
     if (!cfg.gasDeploymentUrl) {
@@ -812,6 +854,128 @@ export class GasService {
       count: importRes.importedCount + importRes.updatedCount,
       message: importRes.message
     };
+  }
+
+  // --- AUTOMATIC BACKGROUND SYNCHRONIZATION (TANPA KLIK TOMBOL) ---
+  private static autoSyncTimer: any = null;
+  private static debouncePushTimer: any = null;
+  private static isSyncingInProgress = false;
+  private static listenersInitialized = false;
+
+  /**
+   * Mengirimkan perubahan lokal ke Google Spreadsheet secara otomatis dengan debouncing
+   */
+  static triggerDebouncedAutoPush(delayMs = 2500): void {
+    const cfg = storageService.getSheetsConfig();
+    if (!cfg.gasDeploymentUrl || !cfg.autoSync) return;
+
+    if (this.debouncePushTimer) {
+      clearTimeout(this.debouncePushTimer);
+    }
+
+    this.debouncePushTimer = setTimeout(async () => {
+      if (this.isSyncingInProgress) return;
+      this.isSyncingInProgress = true;
+      try {
+        await this.pushToSheets(cfg.gasDeploymentUrl);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sijajul_autosync_completed', { detail: { action: 'push', timestamp: new Date().toISOString() } }));
+        }
+      } catch (e) {
+        console.error('Auto-push error:', e);
+      } finally {
+        this.isSyncingInProgress = false;
+      }
+    }, delayMs);
+  }
+
+  /**
+   * Menjalankan sinkronisasi otomatis background berkala (Pull & Push) tanpa perlu klik tombol
+   */
+  static startAutoSync(intervalSeconds = 60, onSyncDone?: (status: { type: string; timestamp: string; message: string }) => void): void {
+    this.stopAutoSync();
+
+    // Jalankan satu kali di awal (immediate auto-sync)
+    const runImmediateSync = async () => {
+      const cfg = storageService.getSheetsConfig();
+      if (!cfg.gasDeploymentUrl) return;
+
+      if (this.isSyncingInProgress) return;
+      this.isSyncingInProgress = true;
+      try {
+        const pullRes = await this.syncAllFromSheets();
+        if (pullRes.success && onSyncDone) {
+          onSyncDone({
+            type: 'pull',
+            timestamp: new Date().toISOString(),
+            message: pullRes.message
+          });
+        }
+      } catch (e) {
+        console.warn('Initial auto-sync pull deferred:', e);
+      } finally {
+        this.isSyncingInProgress = false;
+      }
+    };
+
+    // Jalankan segera setelah 1.5 detik
+    setTimeout(runImmediateSync, 1500);
+
+    // Setup interval background
+    this.autoSyncTimer = setInterval(async () => {
+      const cfg = storageService.getSheetsConfig();
+      if (!cfg.gasDeploymentUrl || !cfg.autoSync) return;
+      if (this.isSyncingInProgress) return;
+
+      this.isSyncingInProgress = true;
+      try {
+        const res = await this.syncAllFromSheets();
+        if (res.success && onSyncDone) {
+          onSyncDone({
+            type: 'periodic',
+            timestamp: new Date().toISOString(),
+            message: res.message
+          });
+        }
+      } catch (e) {
+        console.warn('Periodic auto-sync deferred:', e);
+      } finally {
+        this.isSyncingInProgress = false;
+      }
+    }, Math.max(30, intervalSeconds) * 1000);
+
+    // Pasang listener visibilitychange dan focus sekali saja
+    if (!this.listenersInitialized && typeof window !== 'undefined') {
+      this.listenersInitialized = true;
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          runImmediateSync();
+        }
+      });
+      window.addEventListener('focus', () => {
+        runImmediateSync();
+      });
+      // Listener mutasi lokal untuk auto-push
+      window.addEventListener('sijajul_data_mutated', () => {
+        this.triggerDebouncedAutoPush(2000);
+      });
+    }
+  }
+
+  static stopAutoSync(): void {
+    if (this.autoSyncTimer) {
+      clearInterval(this.autoSyncTimer);
+      this.autoSyncTimer = null;
+    }
+    if (this.debouncePushTimer) {
+      clearTimeout(this.debouncePushTimer);
+      this.debouncePushTimer = null;
+    }
+  }
+
+  static isAutoSyncActive(): boolean {
+    const cfg = storageService.getSheetsConfig();
+    return Boolean(cfg.gasDeploymentUrl && cfg.autoSync);
   }
 }
 

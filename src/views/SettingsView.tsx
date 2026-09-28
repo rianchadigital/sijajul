@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertCircle, Copy, Check, Download, Upload, RotateCcw, 
   FileCode2, MessageSquare, Send, Bot, 
   Sparkles, Image as ImageIcon, Trash2, Eye, ShieldCheck, 
-  Layers
+  Layers, Rocket, Server, Globe, ExternalLink
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { gasService, generateGoogleAppsScriptCode } from '../services/gasService';
@@ -18,7 +18,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _currentUser, onRefreshAll }) => {
-  const [activeTab, setActiveTab] = useState<'WHATSAPP_BOT' | 'LOGO_CONFIG' | 'GAS_CONFIG' | 'SCRIPT_CODE' | 'BACKUP'>('WHATSAPP_BOT');
+  const [activeTab, setActiveTab] = useState<'WHATSAPP_BOT' | 'LOGO_CONFIG' | 'GAS_CONFIG' | 'SCRIPT_CODE' | 'HOSTINGER_DEPLOY' | 'BACKUP'>('WHATSAPP_BOT');
   
   // GAS Config State
   const [gasConfig, setGasConfig] = useState<GasConfig>({
@@ -132,6 +132,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     } finally {
       setTesting(false);
     }
+  };
+
+  const handlePullRealDataFromSheets = async () => {
+    if (!gasConfig.webAppUrl) {
+      alert('Masukkan URL Web App Google Apps Script terlebih dahulu.');
+      return;
+    }
+    const confirmPull = confirm(
+      'Tarik data real dari Google Spreadsheet?\n\n' +
+      'Data master barang, saldo stok 5 gudang pulau, dan akun pegawai akan disinkronkan langsung dari isi Google Spreadsheet Anda.'
+    );
+    if (!confirmPull) return;
+
+    setTesting(true);
+    try {
+      const res = await gasService.syncAllFromSheets();
+      if (res.success) {
+        setGasConfig(gasService.getConfig());
+        onRefreshAll();
+        alert(`✅ ${res.message}`);
+      } else {
+        alert(`Gagal menarik data: ${res.message}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message || 'Gagal koneksi ke Spreadsheet'}`);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleClearDummyData = () => {
+    const confirmClear = confirm(
+      '⚠️ PERINGATAN BERSIHKAN DATA CONTOH / DUMMY:\n\n' +
+      'Apakah Anda yakin ingin membersihkan data contoh (transaksi demo, dropping demo, dan barang contoh)?\n\n' +
+      'Sistem akan dikosongkan agar data murni dan real berasal dari Google Spreadsheet Anda.'
+    );
+    if (!confirmClear) return;
+
+    const res = storageService.clearDummyData(true);
+    onRefreshAll();
+    alert(res.message);
   };
 
   // --- WHATSAPP & BOT HANDLERS ---
@@ -423,6 +464,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
         >
           <FileCode2 className="w-4 h-4 text-teal-700" />
           Script Backend Code.gs
+        </button>
+
+        <button
+          onClick={() => setActiveTab('HOSTINGER_DEPLOY')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === 'HOSTINGER_DEPLOY'
+              ? 'border-blue-700 text-blue-900 bg-blue-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+          }`}
+        >
+          <Rocket className="w-4 h-4 text-blue-600" />
+          Deploy Hostinger &amp; GitHub
+          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] rounded-full font-extrabold">
+            Auto-Deploy
+          </span>
         </button>
 
         <button
@@ -1137,15 +1193,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               />
             </div>
 
-            <div className="pt-2">
-              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+            <div className="pt-2 bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-2">
+              <label className="flex items-start gap-2.5 text-xs text-slate-800 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={gasConfig.autoSync}
                   onChange={(e) => setGasConfig({ ...gasConfig, autoSync: e.target.checked })}
-                  className="rounded text-teal-800 focus:ring-teal-700 w-4 h-4"
+                  className="rounded text-teal-800 focus:ring-teal-700 w-4 h-4 mt-0.5"
                 />
-                <span>Aktifkan Sinkronisasi Otomatis saat Terjadi Transaksi Mutasi & Dropping</span>
+                <div>
+                  <span className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    Aktifkan Sinkronisasi Otomatis Real-Time (Tanpa Perlu Klik Tombol)
+                  </span>
+                  <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
+                    Setiap transaksi, permohonan usulan, dropping, atau penerimaan akan otomatis dikirim ke Google Spreadsheet. Aplikasi juga secara berkala mengecek dan memperbarui data terbaru di latar belakang secara mulus.
+                  </p>
+                </div>
               </label>
             </div>
 
@@ -1167,7 +1231,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap gap-2.5 pt-2">
               <button
                 type="submit"
                 className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
@@ -1187,12 +1251,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
 
               <button
                 type="button"
+                onClick={handlePullRealDataFromSheets}
+                disabled={testing || !gasConfig.webAppUrl}
+                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5"
+                title="Tarik data real dari Google Spreadsheet dan perbarui master barang serta stok"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Tarik Data Real dari Spreadsheet (Pull Real Data)
+              </button>
+
+              <button
+                type="button"
                 onClick={handleSyncAllNow}
                 disabled={testing || !gasConfig.webAppUrl}
                 className="px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-xs font-bold transition-colors border border-teal-200 flex items-center gap-1.5"
               >
                 <Cloud className="w-3.5 h-3.5" />
-                Sinkronkan Semua Data ke Spreadsheet
+                Kirim Data Lokal ke Spreadsheet (Push)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClearDummyData}
+                className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-colors border border-amber-300 flex items-center gap-1.5"
+                title="Bersihkan transaksi dummy/contoh agar data murni dari Spreadsheet"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+                Bersihkan Seluruh Data Dummy
               </button>
             </div>
           </form>
@@ -1339,6 +1424,162 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               <pre className="bg-slate-950 text-slate-200 p-4 rounded-xl text-xs font-mono overflow-x-auto max-h-[520px] border border-slate-800 leading-relaxed scrollbar-thin scrollbar-thumb-slate-800">
                 {googleAppsScriptCode}
               </pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: DEPLOY HOSTINGER & GITHUB (FIX LAYAR BLANK & AUTO-DEPLOY) */}
+      {activeTab === 'HOSTINGER_DEPLOY' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <Rocket className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-900">
+                    Otomatisasi Deployment GitHub ke Hostinger
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Solusi tuntas masalah tampilan blank ("ngeblenk") &amp; panduan deploy otomatis langsung tampil saat web diakses.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1.5 self-start sm:self-auto">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Fix Blank Screen &amp; .htaccess Siap</span>
+              </div>
+            </div>
+
+            {/* Diagnostic Alert Box */}
+            <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center gap-2 font-extrabold text-blue-950 text-sm">
+                <AlertCircle className="w-4 h-4 text-blue-700" />
+                <span>Penyebab Layar Blank ("Ngeblenk") di Hostinger &amp; Solusinya:</span>
+              </div>
+              <p className="text-xs text-blue-900 leading-relaxed">
+                Hosting standar Hostinger (Apache / LiteSpeed) tidak mengompilasi file TypeScript/React (<code>.tsx</code>) secara langsung. Jika Anda hanya menarik repositori Git ke <code>public_html/</code>, browser akan meminta <code>/src/main.tsx</code> dan memicu layar putih kosong (blank).
+              </p>
+              <div className="bg-white/80 p-3.5 rounded-xl border border-blue-200 text-xs text-blue-950 space-y-1.5 font-medium">
+                <div>✅ <strong>Vite Base URL:</strong> Telah disetel ke <code>base: './'</code> agar aset CSS/JS dapat dimuat dari direktori mana pun tanpa error 404.</div>
+                <div>✅ <strong>File .htaccess:</strong> Telah dibuat otomatis di <code>public/.htaccess</code> dan root untuk mendukung SPA routing Apache.</div>
+                <div>✅ <strong>GitHub Actions Workflow:</strong> File <code>.github/workflows/deploy.yml</code> telah disiapkan untuk mengompilasi dan mengunggah otomatis ke Hostinger via FTP!</div>
+              </div>
+            </div>
+
+            {/* Two Methods Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Method 1: GitHub Actions Auto Deploy */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 bg-blue-600 text-white text-[11px] font-extrabold rounded-full">
+                      METODE 1 (OTOMATIS &amp; TERBAIK)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-bold">GitHub Actions</span>
+                  </div>
+
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Deploy Otomatis Setiap Kali Push ke GitHub
+                  </h3>
+
+                  <ol className="text-xs text-slate-600 space-y-2.5 list-decimal pl-4 leading-relaxed">
+                    <li>
+                      Buka <strong>hPanel Hostinger</strong> &gt; menu <strong>Akun FTP (FTP Accounts)</strong>. Catat <em>Host</em>, <em>Username</em>, dan <em>Password</em>.
+                    </li>
+                    <li>
+                      Buka repositori Anda di <strong>GitHub</strong> &gt; klik <strong>Settings</strong> &gt; <strong>Secrets and variables</strong> &gt; <strong>Actions</strong>.
+                    </li>
+                    <li>
+                      Klik <strong>New repository secret</strong> dan buat 3 variabel rahasia ini:
+                      <div className="mt-1.5 bg-slate-900 text-slate-200 p-2.5 rounded-lg font-mono text-[10px] space-y-1">
+                        <div><strong className="text-amber-400">HOSTINGER_FTP_HOST</strong>: ftp.domainanda.com</div>
+                        <div><strong className="text-amber-400">HOSTINGER_FTP_USER</strong>: u123456789</div>
+                        <div><strong className="text-amber-400">HOSTINGER_FTP_PASSWORD</strong>: PasswordFTPAnda</div>
+                      </div>
+                    </li>
+                    <li>
+                      <strong>Selesai!</strong> Setiap kali Anda push commit ke GitHub, GitHub Actions otomatis menjalankan <code>npm run build</code> dan mengirimkan folder <code>dist/</code> ke Hostinger. Web Anda langsung tampil tanpa blank!
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="text-[11px] text-slate-500">
+                    File konfigurasi tersimpan di: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">.github/workflows/deploy.yml</code>
+                  </div>
+                </div>
+              </div>
+
+              {/* Method 2: Manual Upload Build dist */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 bg-emerald-700 text-white text-[11px] font-extrabold rounded-full">
+                      METODE 2 (CEPAT LANGSUNG)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-bold">File Manager</span>
+                  </div>
+
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Upload Hasil Build Folder "dist/" ke Hostinger
+                  </h3>
+
+                  <ol className="text-xs text-slate-600 space-y-2.5 list-decimal pl-4 leading-relaxed">
+                    <li>
+                      Jalankan perintah build di terminal proyek Anda:
+                      <div className="mt-1 bg-slate-900 text-emerald-400 p-2 rounded-lg font-mono text-[11px]">
+                        npm run build
+                      </div>
+                    </li>
+                    <li>
+                      Buka folder <strong>dist/</strong> yang dihasilkan.
+                    </li>
+                    <li>
+                      Buka <strong>File Manager</strong> di hPanel Hostinger &gt; masuk ke folder <strong>public_html/</strong>.
+                    </li>
+                    <li>
+                      Unggah seluruh file di dalam <code>dist/</code> (yaitu <code>index.html</code>, folder <code>assets/</code>, dan file <code>.htaccess</code>) langsung ke dalam <code>public_html/</code>.
+                    </li>
+                    <li>
+                      Buka alamat web domain Anda. Aplikasi SI JAJUL langsung tampil sempurna!
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="text-[11px] text-slate-500">
+                    💡 Tips: Pastikan mengunggah <strong>isi yang ada di dalam dist</strong>, bukan foldernya sendiri.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Apache .htaccess Preview */}
+            <div className="bg-slate-900 text-slate-200 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                  <Server className="w-4 h-4" />
+                  <span>Konfigurasi Rewrite Rule (.htaccess) untuk Server Hostinger:</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">public/.htaccess</span>
+              </div>
+              <pre className="bg-slate-950 p-3.5 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto leading-relaxed border border-slate-800">
+{`<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>`}
+              </pre>
+              <p className="text-[11px] text-slate-400">
+                Aturan rewrite ini otomatis menyalurkan rute SPA (Single Page Application) ke <code>index.html</code>, sehingga saat pengguna me-refresh halaman seperti <code>/stok</code> atau <code>/usulan</code>, tidak akan muncul error 404 Not Found.
+              </p>
             </div>
           </div>
         </div>

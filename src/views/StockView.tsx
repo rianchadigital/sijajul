@@ -41,6 +41,9 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser })
 
   useEffect(() => {
     loadData();
+    const handleUpdate = () => loadData();
+    window.addEventListener('sijajul_data_updated', handleUpdate);
+    return () => window.removeEventListener('sijajul_data_updated', handleUpdate);
   }, []);
 
   // Filter items and prepare display records

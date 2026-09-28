@@ -69,16 +69,27 @@ export default function App() {
     setUnreadNotifsCount(unread);
   }, []);
 
-  const handleSyncData = useCallback(() => {
+  const handleSyncData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const result = storageService.syncDatabase();
-      refreshBadgesAndStats();
-      setSyncVersion(v => v + 1);
-      setSyncToast({
-        message: `Sinkronisasi Berhasil: ${result.stats.items} master barang, ${result.stats.warehouses} gudang pulau, dan ${result.stats.requests} permohonan logistik ter-refresh dari database.`,
-        type: 'success'
-      });
+      const sheetsCfg = storageService.getSheetsConfig();
+      if (sheetsCfg.gasDeploymentUrl) {
+        const pullRes = await gasService.syncAllFromSheets();
+        refreshBadgesAndStats();
+        setSyncVersion(v => v + 1);
+        setSyncToast({
+          message: pullRes.message || 'Sinkronisasi real-time Google Spreadsheet berhasil!',
+          type: 'success'
+        });
+      } else {
+        const result = storageService.syncDatabase();
+        refreshBadgesAndStats();
+        setSyncVersion(v => v + 1);
+        setSyncToast({
+          message: `Sinkronisasi Database Berhasil: ${result.stats.items} barang, ${result.stats.warehouses} gudang ter-refresh.`,
+          type: 'success'
+        });
+      }
       setTimeout(() => {
         setSyncToast(null);
       }, 4000);
@@ -100,6 +111,28 @@ export default function App() {
   useEffect(() => {
     refreshBadgesAndStats();
   }, [refreshBadgesAndStats, activeView]);
+
+  // Otomatisasi Sinkronisasi Spreadsheet di Latar Belakang (Tanpa Perlu Klik Tombol)
+  useEffect(() => {
+    gasService.startAutoSync(45, (_status) => {
+      refreshBadgesAndStats();
+      setSyncVersion(v => v + 1);
+    });
+
+    const handleDataUpdated = () => {
+      refreshBadgesAndStats();
+      setSyncVersion(v => v + 1);
+    };
+
+    window.addEventListener('sijajul_data_updated', handleDataUpdated);
+    window.addEventListener('sijajul_autosync_completed', handleDataUpdated);
+
+    return () => {
+      gasService.stopAutoSync();
+      window.removeEventListener('sijajul_data_updated', handleDataUpdated);
+      window.removeEventListener('sijajul_autosync_completed', handleDataUpdated);
+    };
+  }, [refreshBadgesAndStats]);
 
   // Global shortcut for search: Ctrl+K or Cmd+K
   useEffect(() => {

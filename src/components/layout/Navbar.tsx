@@ -135,28 +135,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Tombol Sinkronisasi Database & Aplikasi */}
-          <button
-            id="btn-sync-database"
-            onClick={handleSyncClick}
-            disabled={localSyncing || isSyncing}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
-              localSyncing || isSyncing
-                ? 'bg-teal-700 text-teal-100 cursor-wait'
-                : syncFeedback
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-teal-800 text-white hover:bg-teal-900 active:scale-95'
-            }`}
-            title="Singkronisasi Data: Muat ulang dan perbarui seluruh data dari database ke aplikasi"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${localSyncing || isSyncing ? 'animate-spin text-teal-200' : ''}`} />
-            <span className="hidden sm:inline">
-              {localSyncing || isSyncing ? 'Sinkronisasi...' : syncFeedback ? syncFeedback : 'Sinkron Data'}
-            </span>
-            <span className="sm:hidden">
-              {localSyncing || isSyncing ? '...' : 'Sync'}
-            </span>
-          </button>
+          {/* Status Auto-Sync Indicator & Tombol Sinkronisasi */}
+          <div className="flex items-center gap-1.5">
+            <button
+              id="btn-sync-database"
+              onClick={handleSyncClick}
+              disabled={localSyncing || isSyncing}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                localSyncing || isSyncing
+                  ? 'bg-teal-700 text-teal-100 cursor-wait'
+                  : syncFeedback
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-teal-800 text-white hover:bg-teal-900 active:scale-95'
+              }`}
+              title="Sinkronisasi Otomatis Berjalan di Latar Belakang (Klik untuk Force Refresh)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${localSyncing || isSyncing ? 'animate-spin text-teal-200' : ''}`} />
+              <span className="hidden md:inline flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                {localSyncing || isSyncing ? 'Menyinkronkan...' : syncFeedback ? syncFeedback : 'Auto-Sync Aktif'}
+              </span>
+              <span className="md:hidden">
+                {localSyncing || isSyncing ? '...' : 'Sync'}
+              </span>
+            </button>
+          </div>
 
           {/* Quick Global Search Button */}
           {onOpenSearch && (

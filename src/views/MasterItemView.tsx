@@ -72,6 +72,9 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
 
   useEffect(() => {
     loadData();
+    const handleUpdate = () => loadData();
+    window.addEventListener('sijajul_data_updated', handleUpdate);
+    return () => window.removeEventListener('sijajul_data_updated', handleUpdate);
   }, []);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {

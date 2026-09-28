@@ -23,13 +23,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, curren
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'HARI_INI' | 'BULAN_INI' | 'TAHUN_INI'>('BULAN_INI');
 
-  useEffect(() => {
+  const loadData = () => {
     setWarehouses(storageService.getWarehouses());
     setItems(storageService.getItems());
     setStocks(storageService.getStocks());
     setRequests(storageService.getRequests());
     setDroppings(storageService.getDroppings());
     setTransactions(storageService.getTransactions());
+  };
+
+  useEffect(() => {
+    loadData();
+    const handleUpdate = () => loadData();
+    window.addEventListener('sijajul_data_updated', handleUpdate);
+    return () => window.removeEventListener('sijajul_data_updated', handleUpdate);
   }, []);
 
   // Metrics Calculations

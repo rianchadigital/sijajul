@@ -91,6 +91,18 @@ class StorageService {
   private setItem<T>(key: string, value: T): void {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      if (typeof window !== 'undefined' && key.startsWith('sijajul_')) {
+        const mutatingKeys = [
+          STORAGE_KEYS.ITEMS, STORAGE_KEYS.STOCKS, STORAGE_KEYS.REQUESTS,
+          STORAGE_KEYS.DROPPINGS, STORAGE_KEYS.TRANSACTIONS, STORAGE_KEYS.PROPOSALS,
+          STORAGE_KEYS.BAST_DOCS, STORAGE_KEYS.SBBK_DOCS, STORAGE_KEYS.USERS,
+          STORAGE_KEYS.WAREHOUSES, STORAGE_KEYS.CATEGORIES
+        ];
+        if (mutatingKeys.includes(key)) {
+          window.dispatchEvent(new CustomEvent('sijajul_data_mutated', { detail: { key } }));
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { key } }));
+        }
+      }
     } catch (e) {
       console.error(`Error writing ${key} to storage:`, e);
     }
@@ -1841,6 +1853,314 @@ class StorageService {
     } catch (e: any) {
       return { success: false, message: e.message || 'File JSON tidak valid' };
     }
+  }
+
+  /**
+   * Membersihkan seluruh data transaksi dan data dummy agar data murni dari Google Spreadsheet
+   */
+  clearDummyData(keepUsers = true): { success: boolean; message: string } {
+    // Kosongkan riwayat mutasi transaksi, permintaan, dropping, dokumen, dan usulan dummy
+    this.setItem(STORAGE_KEYS.REQUESTS, []);
+    this.setItem(STORAGE_KEYS.DROPPINGS, []);
+    this.setItem(STORAGE_KEYS.BAST_DOCS, []);
+    this.setItem(STORAGE_KEYS.SBBK_DOCS, []);
+    this.setItem(STORAGE_KEYS.MUTATIONS, []);
+    this.setItem(STORAGE_KEYS.OPNAMES, []);
+    this.setItem(STORAGE_KEYS.TRANSACTIONS, []);
+    this.setItem(STORAGE_KEYS.PROPOSALS, []);
+    this.setItem(STORAGE_KEYS.ACTIVITY_LOGS, []);
+    this.setItem(STORAGE_KEYS.NOTIFICATIONS, []);
+
+    // Kosongkan master barang dan saldo stok dummy agar diisi data real dari Spreadsheet
+    this.setItem(STORAGE_KEYS.ITEMS, []);
+    this.setItem(STORAGE_KEYS.STOCKS, []);
+
+    if (!keepUsers) {
+      this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
+    }
+
+    this.setItem('sijajul_dummy_cleared_v2', 'true');
+    this.recordAuditLog(
+      'CLEAR_DATA',
+      'DATABASE',
+      'Seluruh data dummy (barang contoh, transaksi, dropping, permohonan) telah dibersihkan. Sistem siap menerima data real dari Spreadsheet.'
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+    }
+
+    return {
+      success: true,
+      message: 'Data contoh/dummy berhasil dibersihkan! Aplikasi kini siap menampilkan data riil dari Google Spreadsheet.'
+    };
+  }
+
+  /**
+   * Impor seluruh dataset dari Google Spreadsheet (hasil pull GAS) ke penyimpanan lokal
+   */
+  importAllFromSpreadsheet(sheetData: any, purgeDummyBeforeImport = true): {
+    success: boolean;
+    counts: { items: number; stocks: number; warehouses: number; requests: number; droppings: number; transactions: number; users: number };
+    message: string;
+  } {
+    if (!sheetData || typeof sheetData !== 'object') {
+      return {
+        success: false,
+        counts: { items: 0, stocks: 0, warehouses: 0, requests: 0, droppings: 0, transactions: 0, users: 0 },
+        message: 'Data dari Google Spreadsheet kosong atau tidak terbaca.'
+      };
+    }
+
+    const counts = { items: 0, stocks: 0, warehouses: 0, requests: 0, droppings: 0, transactions: 0, users: 0 };
+    const nowIso = new Date().toISOString();
+
+    // 1. Gudang Pulau
+    if (Array.isArray(sheetData.warehouses) && sheetData.warehouses.length > 0) {
+      const warehousesList: Warehouse[] = sheetData.warehouses.map((row: any, idx: number) => {
+        const id = row['ID Gudang'] || row['id'] || `GUD-00${idx + 1}`;
+        const kodeGudang = row['Kode Gudang'] || row['kodeGudang'] || `GD-${idx + 1}`;
+        const namaGudang = row['Nama Gudang'] || row['namaGudang'] || `Gudang Pulau ${idx + 1}`;
+        const tipeGudang = (row['Tipe Gudang'] || '').includes('BESAR') ? 'GUDANG_BESAR' : 'SUB_GUDANG';
+        const lokasi = row['Lokasi Pulau'] || row['Alamat'] || row['lokasi'] || '';
+        const picNama = row['PIC / Penanggung Jawab'] || row['picNama'] || '';
+        const statusAktif = String(row['Status'] || row['statusAktif'] || 'Aktif').toLowerCase() !== 'nonaktif';
+        const keterangan = row['Keterangan'] || row['keterangan'] || '';
+
+        return {
+          id,
+          kodeGudang,
+          namaGudang,
+          tipeGudang: tipeGudang as any,
+          parentGudangId: tipeGudang === 'SUB_GUDANG' ? 'GUD-001' : null,
+          picId: `USR-00${idx + 2}`,
+          picNama,
+          lokasi,
+          statusAktif,
+          keterangan
+        };
+      }).filter((w: Warehouse) => !!w.namaGudang);
+
+      if (warehousesList.length > 0) {
+        this.saveWarehouses(warehousesList);
+        counts.warehouses = warehousesList.length;
+      }
+    }
+
+    // 2. Master Barang & Kategori Otomatis
+    if (Array.isArray(sheetData.items) && sheetData.items.length > 0) {
+      const existingCategories = [...this.getCategories()];
+      const categoryMap = new Map<string, Category>();
+      existingCategories.forEach(c => categoryMap.set(c.nama.trim().toLowerCase(), c));
+
+      const itemsList: Item[] = sheetData.items.map((row: any, idx: number) => {
+        const id = row['ID Barang'] || row['id'] || `ITM-${String(idx + 1).padStart(3, '0')}`;
+        const kodeBarang = row['Kode Barang'] || row['kodeBarang'] || `BRG-${idx + 1}`;
+        const namaBarang = row['Nama Barang'] || row['namaBarang'] || row['nama'] || '';
+        const kategoriNama = (row['Kategori'] || row['kategoriNama'] || 'Umum').trim();
+        const satuan = row['Satuan'] || row['satuan'] || 'Pcs';
+        const merk = row['Merk / Pabrikan'] || row['merk'] || '';
+        const spesifikasi = row['Spesifikasi'] || row['spesifikasi'] || '';
+        const stokMinimum = Number(row['Stok Minimum'] || row['stokMinimum'] || 10) || 10;
+        const statusAktif = String(row['Status'] || row['statusAktif'] || 'Aktif').toLowerCase() !== 'nonaktif';
+        const keterangan = row['Keterangan'] || row['keterangan'] || '';
+
+        const catKey = kategoriNama.toLowerCase();
+        let cat = categoryMap.get(catKey);
+        if (!cat) {
+          cat = {
+            id: `CAT-${Date.now()}-${idx}`,
+            kode: `KAT-${existingCategories.length + 1}`,
+            nama: kategoriNama,
+            deskripsi: `Kategori dari Spreadsheet`,
+            statusAktif: true
+          };
+          existingCategories.push(cat);
+          categoryMap.set(catKey, cat);
+        }
+
+        return {
+          id,
+          kodeBarang,
+          namaBarang,
+          kategoriId: cat.id,
+          kategoriNama: cat.nama,
+          satuan,
+          merk,
+          spesifikasi,
+          stokMinimum,
+          statusAktif,
+          keterangan
+        };
+      }).filter((i: Item) => !!i.namaBarang);
+
+      if (itemsList.length > 0) {
+        this.saveCategories(existingCategories);
+        this.saveItems(itemsList);
+        counts.items = itemsList.length;
+      }
+    }
+
+    // 3. Saldo Stok Gudang
+    if (Array.isArray(sheetData.stocks) && sheetData.stocks.length > 0) {
+      const stocksList: WarehouseStock[] = sheetData.stocks.map((row: any, idx: number) => {
+        const id = row['ID Stok'] || row['id'] || `STK-${idx + 1}`;
+        const gudangId = row['ID Gudang'] || row['gudangId'] || 'GUD-001';
+        const barangId = row['ID Barang'] || row['barangId'] || '';
+        const saldo = Number(row['Saldo Stok'] || row['saldo'] || 0) || 0;
+        const lokasiRak = row['Lokasi Rak'] || row['lokasiRak'] || '';
+        const updateTerakhir = row['Terakhir Diperbarui'] || row['updateTerakhir'] || nowIso;
+
+        return {
+          id,
+          gudangId,
+          barangId,
+          stokAwal: saldo,
+          stokMasuk: 0,
+          stokKeluar: 0,
+          saldo,
+          lokasiRak,
+          updateTerakhir
+        };
+      }).filter((s: WarehouseStock) => !!s.barangId);
+
+      if (stocksList.length > 0) {
+        this.saveStocks(stocksList);
+        counts.stocks = stocksList.length;
+      }
+    }
+
+    // 4. Permintaan Barang
+    if (Array.isArray(sheetData.requests) && sheetData.requests.length > 0) {
+      const requestsList: ItemRequest[] = sheetData.requests.map((row: any, idx: number) => {
+        let items: any[] = [];
+        try {
+          if (row['Detail Items (JSON)']) items = JSON.parse(row['Detail Items (JSON)']);
+        } catch (e) {}
+
+        return {
+          id: row['ID Permintaan'] || row['id'] || `REQ-${idx + 1}`,
+          nomorPermintaan: row['Nomor Permintaan'] || row['nomorPermintaan'] || `REQ-${idx + 1}`,
+          tanggalPermintaan: row['Tanggal'] || row['tanggalPermintaan'] || nowIso.slice(0, 10),
+          pemohonId: 'USR-003',
+          pemohonNama: row['Nama Pemohon'] || 'Petugas',
+          pemohonNip: row['NIP Pemohon'] || '-',
+          pemohonJabatan: 'Petugas Sub Gudang',
+          tempatTugas: row['Nama Gudang Pemohon'] || 'Puskesmas',
+          gudangAsalId: 'GUD-001',
+          gudangAsalNama: 'Gudang Puskesmas Kepulauan Seribu Selatan',
+          gudangTujuanId: row['ID Gudang Pemohon'] || 'GUD-002',
+          gudangTujuanNama: row['Nama Gudang Pemohon'] || 'Gudang Tujuan',
+          status: row['Status Approval'] || row['status'] || 'DIAJUKAN',
+          catatanPemohon: row['Keperluan'] || '',
+          catatanApproval: row['Catatan Verifikasi'] || '',
+          tanggalApproval: row['Tanggal Approval'] || '',
+          items: items.length > 0 ? items : [],
+          createdAt: row['Tanggal'] || nowIso,
+          updatedAt: row['Tanggal Approval'] || nowIso
+        };
+      });
+
+      if (requestsList.length > 0) {
+        this.saveRequests(requestsList);
+        counts.requests = requestsList.length;
+      }
+    }
+
+    // 5. Dropping Logistik
+    if (Array.isArray(sheetData.droppings) && sheetData.droppings.length > 0) {
+      const droppingsList: Dropping[] = sheetData.droppings.map((row: any, idx: number) => {
+        let items: any[] = [];
+        try {
+          if (row['Detail Items (JSON)']) items = JSON.parse(row['Detail Items (JSON)']);
+        } catch (e) {}
+
+        return {
+          id: row['ID Dropping'] || row['id'] || `DRP-${idx + 1}`,
+          nomorDropping: row['Nomor Dropping'] || row['nomorDropping'] || `DRP-${idx + 1}`,
+          permintaanId: row['Nomor Permintaan'] || `REQ-${idx + 1}`,
+          nomorPermintaan: row['Nomor Permintaan'] || '',
+          tanggalDropping: row['Tanggal Kirim'] || nowIso.slice(0, 10),
+          gudangAsalId: 'GUD-001',
+          gudangAsalNama: row['Gudang Asal'] || 'Gudang Besar KSS',
+          gudangTujuanId: 'GUD-002',
+          gudangTujuanNama: row['Gudang Tujuan'] || 'Sub Gudang',
+          petugasPengirimId: 'USR-002',
+          petugasPengirimNama: row['Petugas Pengirim'] || 'Petugas Pengirim',
+          petugasPenerimaNama: row['Petugas Penerima'] || '',
+          status: row['Status Pengiriman'] || 'DIKIRIM',
+          keterangan: row['Catatan'] || '',
+          items: items,
+          nomorBast: row['Nomor BAST'] || '',
+          createdAt: row['Tanggal Kirim'] || nowIso
+        };
+      });
+
+      if (droppingsList.length > 0) {
+        this.saveDroppings(droppingsList);
+        counts.droppings = droppingsList.length;
+      }
+    }
+
+    // 6. Transaksi Mutasi
+    if (Array.isArray(sheetData.transactions) && sheetData.transactions.length > 0) {
+      const trxList: StockTransaction[] = sheetData.transactions.map((row: any, idx: number) => {
+        return {
+          id: row['ID Transaksi'] || row['id'] || `TRX-${idx + 1}`,
+          tanggal: row['Tanggal & Waktu'] ? String(row['Tanggal & Waktu']).slice(0, 10) : nowIso.slice(0, 10),
+          nomorTransaksi: row['Nomor Transaksi'] || `TRX-${idx + 1}`,
+          gudangId: 'GUD-001',
+          gudangNama: row['Gudang Terkait'] || '',
+          barangId: 'ITM-001',
+          barangNama: row['Nama Barang'] || '',
+          kodeBarang: row['Kode Barang'] || '',
+          satuan: 'Pcs',
+          jenisTransaksi: row['Tipe Transaksi'] || 'PENYESUAIAN',
+          masuk: Number(row['Jumlah Masuk'] || 0) || 0,
+          keluar: Number(row['Jumlah Keluar'] || 0) || 0,
+          saldoSebelumnya: 0,
+          saldoAkhir: Number(row['Saldo Akhir'] || 0) || 0,
+          userId: 'USR-001',
+          userNama: row['Petugas Operator'] || 'Operator',
+          referensiDokumen: row['Referensi Dokumen'] || '',
+          keterangan: row['Keterangan / Catatan'] || '',
+          createdAt: row['Tanggal & Waktu'] || nowIso
+        };
+      });
+
+      if (trxList.length > 0) {
+        this.saveTransactions(trxList);
+        counts.transactions = trxList.length;
+      }
+    }
+
+    // 7. Pengguna Sistem
+    if (Array.isArray(sheetData.users) && sheetData.users.length > 0) {
+      const userRes = this.importUsersFromSpreadsheetRows(sheetData.users);
+      counts.users = userRes.importedCount + userRes.updatedCount;
+    }
+
+    // Update config status
+    const cfg = this.getSheetsConfig();
+    cfg.lastSyncTime = nowIso.replace('T', ' ').slice(0, 19);
+    cfg.isConnected = true;
+    this.saveSheetsConfig(cfg);
+
+    this.recordAuditLog(
+      'SYNC_PULL',
+      'DATABASE',
+      `Otomatis memperbarui data dari Spreadsheet: ${counts.items} barang, ${counts.stocks} baris stok, ${counts.warehouses} gudang.`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+    }
+
+    return {
+      success: true,
+      counts,
+      message: `Berhasil menyelaraskan ${counts.items} barang, ${counts.stocks} catatan saldo stok, ${counts.warehouses} gudang, dan ${counts.users} pegawai langsung dari Google Spreadsheet!`
+    };
   }
 }
 

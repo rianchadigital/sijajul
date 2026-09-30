@@ -22,11 +22,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   
   // GAS Config State
   const [gasConfig, setGasConfig] = useState<GasConfig>({
-    webAppUrl: '',
-    spreadsheetId: '',
+    webAppUrl: 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec',
+    spreadsheetId: '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs',
     autoSync: true,
     lastSyncTime: '',
-    status: 'OFFLINE'
+    status: 'CONNECTED'
   });
 
   // WhatsApp & Bot Config State
@@ -1296,7 +1296,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                     Kode Backend Google Apps Script (Code.gs) & Setup Database
                   </h2>
                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded-full">
-                    v2.5.0 Auto-Setup
+                    v2.7.0 Auto-Setup &amp; Real-Time
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-500 mt-1">

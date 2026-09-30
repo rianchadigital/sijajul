@@ -112,9 +112,9 @@ export default function App() {
     refreshBadgesAndStats();
   }, [refreshBadgesAndStats, activeView]);
 
-  // Otomatisasi Sinkronisasi Spreadsheet di Latar Belakang (Tanpa Perlu Klik Tombol)
+  // Otomatisasi Sinkronisasi Spreadsheet Real-Time Setiap Detik (Tanpa Perlu Klik Tombol atau Refresh)
   useEffect(() => {
-    gasService.startAutoSync(45, (_status) => {
+    gasService.startAutoSync(1, (_status) => {
       refreshBadgesAndStats();
       setSyncVersion(v => v + 1);
     });

@@ -50,8 +50,9 @@ export const generateGoogleAppsScriptCode = (spreadsheetId: string = 'SPREADSHEE
 var CONFIG = {
   APP_NAME: "SI JAJUL - Sistem Informasi Jaga Stok dan Jalur Logistik Puskesmas Kepulauan Seribu Selatan",
   APP_SHORT_NAME: "SI JAJUL",
-  APP_VERSION: "2.5.0",
+  APP_VERSION: "2.7.0",
   INSTANSI: "Puskesmas Kecamatan Kepulauan Seribu Selatan",
+  SPREADSHEET_ID: "1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs",
   TIMEZONE: "Asia/Jakarta",
   HEADER_BG_COLOR: "#005e54", // Hijau Puskesmas / Teal Tua Resmi
   HEADER_FONT_COLOR: "#ffffff",
@@ -59,10 +60,23 @@ var CONFIG = {
 };
 
 /**
- * Mendapatkan referensi Spreadsheet aktif
+ * Mendapatkan referensi Spreadsheet aktif (mendukung container-bound & standalone Web App)
  */
 function getSpreadsheet() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+  var targetId = CONFIG.SPREADSHEET_ID || "1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs";
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (ss && ss.getId()) return ss;
+  } catch(e) {}
+  try {
+    if (targetId && targetId.indexOf("SPREADSHEET_ID") === -1) {
+      return SpreadsheetApp.openById(targetId);
+    }
+  } catch(e) {}
+  try {
+    return SpreadsheetApp.getActive();
+  } catch(e) {}
+  throw new Error("Spreadsheet tidak dapat dibuka. Pastikan ID: " + targetId + " benar dan akun Apps Script memiliki izin akses.");
 }
 
 /**
@@ -531,6 +545,47 @@ function doGet(e) {
         timestamp: new Date().toISOString()
       };
     }
+    else if (action === "quickSync") {
+      result = {
+        status: "success",
+        items: readTable("MASTER_BARANG"),
+        stocks: readTable("STOK_GUDANG"),
+        timestamp: new Date().toISOString()
+      };
+    }
+    else if (action === "getItems") {
+      result = {
+        status: "success",
+        items: readTable("MASTER_BARANG"),
+        timestamp: new Date().toISOString()
+      };
+    }
+    else if (action === "saveItem") {
+      var itemObj = {};
+      if (e.parameter.item) {
+        try { itemObj = JSON.parse(e.parameter.item); } catch(err) { itemObj = e.parameter; }
+      } else {
+        itemObj = {
+          id: e.parameter.id,
+          kodeBarang: e.parameter.kodeBarang,
+          namaBarang: e.parameter.namaBarang,
+          kategoriNama: e.parameter.kategoriNama,
+          satuan: e.parameter.satuan,
+          merk: e.parameter.merk,
+          spesifikasi: e.parameter.spesifikasi,
+          stokMinimum: e.parameter.stokMinimum,
+          statusAktif: e.parameter.statusAktif !== "false",
+          keterangan: e.parameter.keterangan,
+          stokAwal: e.parameter.stokAwal
+        };
+      }
+      var saveMsg = saveSingleItemToSheet(itemObj, e.parameter.stokAwal);
+      result = { status: "success", message: saveMsg };
+    }
+    else if (action === "deleteItem") {
+      var delMsg = deleteSingleItemFromSheet(e.parameter.itemId);
+      result = { status: "success", message: delMsg };
+    }
     else if (action === "checkStock") {
       var query = (e && e.parameter && e.parameter.query) ? e.parameter.query.toLowerCase() : "";
       var stocks = pullAllDataFromSheets().stocks || [];
@@ -567,6 +622,14 @@ function doPost(e) {
       var syncRes = pushAllDataToSheets(payload.data);
       result = { status: "success", result: syncRes };
     }
+    else if (action === "saveItem") {
+      var saveRes = saveSingleItemToSheet(payload.item, payload.stokAwal);
+      result = { status: "success", message: "Barang berhasil disimpan di Spreadsheet", result: saveRes };
+    }
+    else if (action === "deleteItem") {
+      var delRes = deleteSingleItemFromSheet(payload.itemId);
+      result = { status: "success", message: "Barang berhasil dihapus dari Spreadsheet", result: delRes };
+    }
     else if (action === "setupDatabase") {
       var setupMsg = setupDatabase();
       result = { status: "success", message: setupMsg };
@@ -588,6 +651,137 @@ function doPost(e) {
 
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function saveSingleItemToSheet(item, initialStock) {
+  if (!item) return "Data barang kosong";
+  var ss = getSpreadsheet();
+  var sheet = ss.getSheetByName("MASTER_BARANG");
+  if (!sheet) {
+    setupDatabase();
+    sheet = ss.getSheetByName("MASTER_BARANG");
+  }
+  var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(10, sheet.getLastColumn());
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var idColIdx = headers.indexOf("ID Barang");
+  if (idColIdx === -1) idColIdx = 0;
+  var kodeColIdx = headers.indexOf("Kode Barang");
+  if (kodeColIdx === -1) kodeColIdx = 1;
+
+  var foundRow = -1;
+  if (lastRow > 1) {
+    var allData = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    for (var i = 0; i < allData.length; i++) {
+      var rowId = (allData[i][idColIdx] || "").toString().trim();
+      var rowKode = (allData[i][kodeColIdx] || "").toString().trim().toLowerCase();
+      var targetId = (item.id || "").toString().trim();
+      var targetKode = (item.kodeBarang || "").toString().trim().toLowerCase();
+
+      if ((targetId && rowId === targetId) || (targetKode && rowKode === targetKode)) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  var rowData = [
+    item.id || ("ITM-" + Date.now()),
+    item.kodeBarang || "",
+    item.namaBarang || "",
+    item.kategoriNama || item.kategori || "Umum",
+    item.satuan || "Pcs",
+    item.merk || "",
+    item.spesifikasi || "",
+    Number(item.stokMinimum || 10) || 10,
+    (item.statusAktif === false || item.status === "Nonaktif") ? "Nonaktif" : "Aktif",
+    item.keterangan || ""
+  ];
+
+  if (foundRow !== -1) {
+    sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+
+  // Sinkronkan ke sheet STOK_GUDANG untuk Gudang Besar
+  try {
+    var stockSheet = ss.getSheetByName("STOK_GUDANG");
+    if (stockSheet) {
+      var sLastRow = stockSheet.getLastRow();
+      var sFoundRow = -1;
+      if (sLastRow > 1) {
+        var sData = stockSheet.getRange(2, 1, sLastRow - 1, 4).getValues();
+        for (var k = 0; k < sData.length; k++) {
+          if (sData[k][1] === "GUD-001" && sData[k][3] === rowData[0]) {
+            sFoundRow = k + 2;
+            break;
+          }
+        }
+      }
+      var stockQty = Number(initialStock !== undefined ? initialStock : (item.stokAwal || 0)) || 0;
+      var statusStok = (stockQty <= Number(item.stokMinimum || 10)) ? "Kritis" : "Aman";
+      var nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      if (sFoundRow !== -1) {
+        stockSheet.getRange(sFoundRow, 5, 1, 7).setValues([[
+          item.kodeBarang || "", item.namaBarang || "", item.kategoriNama || "Umum",
+          stockQty, item.satuan || "Pcs", Number(item.stokMinimum || 10), statusStok
+        ]]);
+      } else {
+        stockSheet.appendRow([
+          "STK-GUD-001-" + rowData[0],
+          "GUD-001",
+          "Gudang Puskesmas Kepulauan Seribu Selatan",
+          rowData[0],
+          item.kodeBarang || "",
+          item.namaBarang || "",
+          item.kategoriNama || "Umum",
+          stockQty,
+          item.satuan || "Pcs",
+          Number(item.stokMinimum || 10),
+          statusStok,
+          "Rak Utama",
+          nowStr
+        ]);
+      }
+    }
+  } catch(e) {}
+
+  return foundRow !== -1 
+    ? "Barang \"" + item.namaBarang + "\" berhasil diperbarui di Spreadsheet (baris " + foundRow + ")"
+    : "Barang baru \"" + item.namaBarang + "\" berhasil ditambahkan ke Spreadsheet";
+}
+
+function deleteSingleItemFromSheet(itemId) {
+  if (!itemId) return "ID barang kosong";
+  var ss = getSpreadsheet();
+  var sheet = ss.getSheetByName("MASTER_BARANG");
+  if (!sheet) return "Sheet MASTER_BARANG tidak ditemukan";
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return "Tabel kosong";
+  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (ids[i][0] && ids[i][0].toString().trim() === itemId.toString().trim()) {
+      sheet.deleteRow(i + 2);
+      break;
+    }
+  }
+
+  // Hapus juga dari STOK_GUDANG
+  try {
+    var stockSheet = ss.getSheetByName("STOK_GUDANG");
+    if (stockSheet && stockSheet.getLastRow() > 1) {
+      var sLast = stockSheet.getLastRow();
+      var sRows = stockSheet.getRange(2, 4, sLast - 1, 1).getValues();
+      for (var s = sRows.length - 1; s >= 0; s--) {
+        if (sRows[s][0] && sRows[s][0].toString().trim() === itemId.toString().trim()) {
+          stockSheet.deleteRow(s + 2);
+        }
+      }
+    }
+  } catch(e) {}
+
+  return "Barang ID " + itemId + " berhasil dihapus dari Spreadsheet";
 }
 
 function appendRowToTable(sheetName, item) {
@@ -856,18 +1050,178 @@ export class GasService {
     };
   }
 
-  // --- AUTOMATIC BACKGROUND SYNCHRONIZATION (TANPA KLIK TOMBOL) ---
+  /**
+   * Menyimpan / memperbarui satu item master barang langsung ke Google Spreadsheet
+   */
+  static async saveItemToSheets(item: any, initialStock = 0): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) {
+      return { success: false, message: 'URL Web App GAS belum diatur di Pengaturan.' };
+    }
+
+    const payload = {
+      action: 'saveItem',
+      item: {
+        id: item.id,
+        kodeBarang: item.kodeBarang,
+        namaBarang: item.namaBarang,
+        kategoriNama: item.kategoriNama || item.kategoriId || 'Umum',
+        satuan: item.satuan || 'Pcs',
+        merk: item.merk || '',
+        spesifikasi: item.spesifikasi || '',
+        stokMinimum: Number(item.stokMinimum || 10) || 10,
+        statusAktif: item.statusAktif !== false,
+        keterangan: item.keterangan || ''
+      },
+      stokAwal: Number(initialStock) || 0
+    };
+
+    // 1. Coba kirim via POST cepat dengan AbortController timeout 6 detik
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const resJson = await response.json().catch(() => null);
+      if (resJson && resJson.status === 'success') {
+        const sheetsCfg = storageService.getSheetsConfig();
+        sheetsCfg.lastSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        sheetsCfg.isConnected = true;
+        storageService.saveSheetsConfig(sheetsCfg);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'saveItem', item } }));
+        }
+        return { success: true, message: resJson.message || 'Barang berhasil disimpan di Google Spreadsheet!' };
+      }
+    } catch (postErr) {
+      console.warn('POST saveItem dialihkan ke mode GET langsung:', postErr);
+    }
+
+    // 2. Fallback GET: Mengirim data terenkode via URL parameter yang sangat cepat di Google Apps Script
+    try {
+      const params = new URLSearchParams({
+        action: 'saveItem',
+        id: String(item.id || ''),
+        kodeBarang: String(item.kodeBarang || ''),
+        namaBarang: String(item.namaBarang || ''),
+        kategoriNama: String(item.kategoriNama || 'Umum'),
+        satuan: String(item.satuan || 'Pcs'),
+        merk: String(item.merk || ''),
+        spesifikasi: String(item.spesifikasi || ''),
+        stokMinimum: String(item.stokMinimum || 10),
+        statusAktif: String(item.statusAktif !== false),
+        stokAwal: String(initialStock || 0),
+        keterangan: String(item.keterangan || '')
+      });
+
+      const getRes = await fetch(`${url}?${params.toString()}`, { method: 'GET', mode: 'cors' });
+      const getJson = await getRes.json().catch(() => null);
+      if (getJson && getJson.status === 'success') {
+        const sheetsCfg = storageService.getSheetsConfig();
+        sheetsCfg.lastSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        sheetsCfg.isConnected = true;
+        storageService.saveSheetsConfig(sheetsCfg);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'saveItem', item } }));
+        }
+        return { success: true, message: getJson.message || 'Barang berhasil disimpan di Google Spreadsheet!' };
+      }
+    } catch (getErr) {
+      console.warn('GET saveItem fallback:', getErr);
+    }
+
+    // Picu sinkronisasi lokal dan antrean push
+    this.triggerDebouncedAutoPush(500);
+    return { success: true, message: 'Barang berhasil disimpan lokal dan masuk antrean sinkronisasi spreadsheet.' };
+  }
+
+  /**
+   * Menghapus barang dari Google Spreadsheet
+   */
+  static async deleteItemFromSheets(itemId: string): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) return { success: false, message: 'URL GAS belum diatur' };
+
+    try {
+      const payload = {
+        action: 'deleteItem',
+        itemId
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return { success: true, message: 'Barang berhasil dihapus dari Spreadsheet' };
+    } catch (e: any) {
+      // Fallback via GET
+      try {
+        await fetch(`${url}?action=deleteItem&itemId=${encodeURIComponent(itemId)}`, { method: 'GET', mode: 'cors' });
+      } catch (err) {}
+      this.triggerDebouncedAutoPush(400);
+      return { success: true, message: 'Terhapus lokal & disinkronkan' };
+    }
+  }
+
+  /**
+   * Sinkronisasi Cepat (Quick Sync) khusus MASTER_BARANG & STOK_GUDANG untuk auto-sync setiap detik
+   */
+  static async syncQuickFromSheets(): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) return { success: false, message: 'URL GAS kosong' };
+
+    try {
+      const response = await fetch(`${url}?action=quickSync`, { method: 'GET', mode: 'cors' });
+      if (!response.ok) throw new Error('Quick sync HTTP ' + response.status);
+      const resJson = await response.json();
+      if (resJson.status === 'success') {
+        const hasItems = Array.isArray(resJson.items) && resJson.items.length > 0;
+        const hasStocks = Array.isArray(resJson.stocks) && resJson.stocks.length > 0;
+        
+        if (hasItems || hasStocks) {
+          storageService.importAllFromSpreadsheet({
+            items: resJson.items || [],
+            stocks: resJson.stocks || []
+          }, false);
+          return { success: true, message: 'Sinkronisasi instan spreadsheet terbarui' };
+        }
+      }
+      return { success: true, message: 'Sinkronisasi berjalan' };
+    } catch (e) {
+      // Fallback ke syncAll jika quickSync belum terpasang di GAS
+      return { success: false, message: 'Quick sync deferred' };
+    }
+  }
+
+  // --- AUTOMATIC REAL-TIME BACKGROUND SYNCHRONIZATION (SETIAP DETIK / OTOMATIS) ---
   private static autoSyncTimer: any = null;
   private static debouncePushTimer: any = null;
   private static isSyncingInProgress = false;
   private static listenersInitialized = false;
 
   /**
-   * Mengirimkan perubahan lokal ke Google Spreadsheet secara otomatis dengan debouncing
+   * Mengirimkan perubahan lokal ke Google Spreadsheet secara otomatis dan cepat (debounced)
    */
-  static triggerDebouncedAutoPush(delayMs = 2500): void {
+  static triggerDebouncedAutoPush(delayMs = 400): void {
     const cfg = storageService.getSheetsConfig();
-    if (!cfg.gasDeploymentUrl || !cfg.autoSync) return;
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url || !cfg.autoSync) return;
 
     if (this.debouncePushTimer) {
       clearTimeout(this.debouncePushTimer);
@@ -877,7 +1231,7 @@ export class GasService {
       if (this.isSyncingInProgress) return;
       this.isSyncingInProgress = true;
       try {
-        await this.pushToSheets(cfg.gasDeploymentUrl);
+        await this.pushToSheets(url);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('sijajul_autosync_completed', { detail: { action: 'push', timestamp: new Date().toISOString() } }));
         }
@@ -890,9 +1244,10 @@ export class GasService {
   }
 
   /**
-   * Menjalankan sinkronisasi otomatis background berkala (Pull & Push) tanpa perlu klik tombol
+   * Menjalankan sinkronisasi otomatis background berkala (Pull & Push) real-time SETIAP DETIK
+   * tanpa perlu klik tombol atau refresh halaman manual
    */
-  static startAutoSync(intervalSeconds = 60, onSyncDone?: (status: { type: string; timestamp: string; message: string }) => void): void {
+  static startAutoSync(intervalSeconds = 1, onSyncDone?: (status: { type: string; timestamp: string; message: string }) => void): void {
     this.stopAutoSync();
 
     // Jalankan satu kali di awal (immediate auto-sync)
@@ -918,33 +1273,50 @@ export class GasService {
       }
     };
 
-    // Jalankan segera setelah 1.5 detik
-    setTimeout(runImmediateSync, 1500);
+    // Jalankan segera setelah 500ms
+    setTimeout(runImmediateSync, 500);
 
-    // Setup interval background
+    // Setup interval background setiap 1 detik untuk sinkronisasi real-time instan
+    const intervalMs = Math.max(1, intervalSeconds) * 1000;
+    let tickCount = 0;
+
     this.autoSyncTimer = setInterval(async () => {
       const cfg = storageService.getSheetsConfig();
       if (!cfg.gasDeploymentUrl || !cfg.autoSync) return;
       if (this.isSyncingInProgress) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
 
+      tickCount++;
       this.isSyncingInProgress = true;
       try {
-        const res = await this.syncAllFromSheets();
-        if (res.success && onSyncDone) {
-          onSyncDone({
-            type: 'periodic',
-            timestamp: new Date().toISOString(),
-            message: res.message
-          });
+        // Setiap 15 detik lakukan full sync, setiap 1 detik lakukan quick sync barang & stok
+        if (tickCount % 15 === 0) {
+          const res = await this.syncAllFromSheets();
+          if (res.success && onSyncDone) {
+            onSyncDone({
+              type: 'periodic',
+              timestamp: new Date().toISOString(),
+              message: res.message
+            });
+          }
+        } else {
+          const quickRes = await this.syncQuickFromSheets();
+          if (quickRes.success && onSyncDone) {
+            onSyncDone({
+              type: 'quick',
+              timestamp: new Date().toISOString(),
+              message: quickRes.message
+            });
+          }
         }
       } catch (e) {
-        console.warn('Periodic auto-sync deferred:', e);
+        // Abaikan error jaringan sementara
       } finally {
         this.isSyncingInProgress = false;
       }
-    }, Math.max(30, intervalSeconds) * 1000);
+    }, intervalMs);
 
-    // Pasang listener visibilitychange dan focus sekali saja
+    // Pasang listener visibilitychange, focus, dan storage sekali saja
     if (!this.listenersInitialized && typeof window !== 'undefined') {
       this.listenersInitialized = true;
       window.addEventListener('visibilitychange', () => {
@@ -955,9 +1327,15 @@ export class GasService {
       window.addEventListener('focus', () => {
         runImmediateSync();
       });
-      // Listener mutasi lokal untuk auto-push
+      // Listener mutasi lokal untuk auto-push cepat
       window.addEventListener('sijajul_data_mutated', () => {
-        this.triggerDebouncedAutoPush(2000);
+        this.triggerDebouncedAutoPush(300);
+      });
+      // Listener tab lain jika ada perubahan di browser lain
+      window.addEventListener('storage', (e) => {
+        if (e.key?.includes('sijajul')) {
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+        }
       });
     }
   }

@@ -148,15 +148,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                   : 'bg-teal-800 text-white hover:bg-teal-900 active:scale-95'
               }`}
-              title="Sinkronisasi Otomatis Berjalan di Latar Belakang (Klik untuk Force Refresh)"
+              title="Sinkronisasi Otomatis Real-Time Berjalan Setiap Detik (Data aplikasi selalu sesuai dengan spreadsheet)"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${localSyncing || isSyncing ? 'animate-spin text-teal-200' : ''}`} />
               <span className="hidden md:inline flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                {localSyncing || isSyncing ? 'Menyinkronkan...' : syncFeedback ? syncFeedback : 'Auto-Sync Aktif'}
+                {localSyncing || isSyncing ? 'Menyinkronkan...' : syncFeedback ? syncFeedback : 'Auto-Sync 1 Detik'}
               </span>
               <span className="md:hidden">
-                {localSyncing || isSyncing ? '...' : 'Sync'}
+                {localSyncing || isSyncing ? '...' : '1s'}
               </span>
             </button>
           </div>

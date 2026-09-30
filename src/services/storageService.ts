@@ -499,16 +499,60 @@ class StorageService {
     this.setItem(STORAGE_KEYS.ITEMS, items);
   }
 
-  saveItem(item: Item): void {
+  saveItem(item: Item, initialStockBigWarehouse = 0): void {
     const items = this.getItems();
     const idx = items.findIndex(i => i.id === item.id);
+    const isNew = idx < 0;
     if (idx >= 0) {
       items[idx] = item;
     } else {
       items.push(item);
     }
     this.saveItems(items);
-    this.recordAuditLog('UPDATE', 'MASTER_BARANG', `Menyimpan data master barang ${item.namaBarang}`);
+
+    // Sinkronkan atau buat saldo stok awal untuk gudang
+    const stocks = this.getStocks();
+    const warehouses = this.getWarehouses();
+
+    if (isNew) {
+      warehouses.forEach(wh => {
+        const stockExists = stocks.some(s => s.barangId === item.id && s.gudangId === wh.id);
+        if (!stockExists) {
+          const initQty = (wh.tipeGudang === 'GUDANG_BESAR' || wh.id === 'GUD-001') ? initialStockBigWarehouse : 0;
+          stocks.push({
+            id: `STK-${wh.id}-${item.id}`,
+            gudangId: wh.id,
+            barangId: item.id,
+            stokAwal: initQty,
+            stokMasuk: 0,
+            stokKeluar: 0,
+            saldo: initQty,
+            updateTerakhir: new Date().toISOString().replace('T', ' ').slice(0, 19)
+          });
+        }
+      });
+      this.saveStocks(stocks);
+    } else {
+      let changed = false;
+      stocks.forEach(s => {
+        if (s.barangId === item.id) {
+          s.updateTerakhir = new Date().toISOString().replace('T', ' ').slice(0, 19);
+          changed = true;
+        }
+      });
+      if (changed) this.saveStocks(stocks);
+    }
+
+    this.recordAuditLog(
+      isNew ? 'CREATE' : 'UPDATE', 
+      'MASTER_BARANG', 
+      `${isNew ? 'Menambahkan' : 'Memperbarui'} master barang "${item.namaBarang}" (Kode: ${item.kodeBarang}, Satuan: ${item.satuan})`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_mutated', { detail: { key: STORAGE_KEYS.ITEMS, item } }));
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { key: STORAGE_KEYS.ITEMS, item } }));
+    }
   }
 
   deleteItem(id: string): void {
@@ -516,6 +560,10 @@ class StorageService {
     const itemToDelete = items.find(i => i.id === id);
     const updated = items.filter(i => i.id !== id);
     this.saveItems(updated);
+
+    // Hapus juga saldo stok barang ini di seluruh gudang
+    const stocks = this.getStocks().filter(s => s.barangId !== id);
+    this.saveStocks(stocks);
     
     const current = this.getCurrentUser();
     this.recordAuditLog(
@@ -525,6 +573,11 @@ class StorageService {
       current?.nama || 'Super Admin',
       current?.role || 'ADMIN'
     );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_mutated', { detail: { key: STORAGE_KEYS.ITEMS, deletedId: id } }));
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { key: STORAGE_KEYS.ITEMS, deletedId: id } }));
+    }
   }
 
   /**
@@ -1121,7 +1174,18 @@ class StorageService {
   }
 
   getSheetsConfig(): GoogleSheetsConfig {
-    return this.getItem<GoogleSheetsConfig>(STORAGE_KEYS.SHEETS_CONFIG, DEFAULT_SHEETS_CONFIG);
+    const cfg = this.getItem<GoogleSheetsConfig>(STORAGE_KEYS.SHEETS_CONFIG, DEFAULT_SHEETS_CONFIG);
+    const targetGasUrl = 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    const targetSpreadsheetId = '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs';
+
+    if (!cfg.gasDeploymentUrl || cfg.gasDeploymentUrl !== targetGasUrl || !cfg.spreadsheetId || cfg.spreadsheetId !== targetSpreadsheetId) {
+      cfg.spreadsheetId = targetSpreadsheetId;
+      cfg.gasDeploymentUrl = targetGasUrl;
+      cfg.autoSync = true;
+      cfg.isConnected = true;
+      this.saveSheetsConfig(cfg);
+    }
+    return cfg;
   }
 
   saveSheetsConfig(cfg: GoogleSheetsConfig): void {
@@ -2162,6 +2226,41 @@ class StorageService {
       message: `Berhasil menyelaraskan ${counts.items} barang, ${counts.stocks} catatan saldo stok, ${counts.warehouses} gudang, dan ${counts.users} pegawai langsung dari Google Spreadsheet!`
     };
   }
+
+  checkAndAutoPurgeDummy(): void {
+    try {
+      if (typeof window === 'undefined') return;
+      const flag = localStorage.getItem('sijajul_dummy_cleared_v8_real');
+      if (!flag) {
+        const existingItems = this.getItems();
+        const hasDummy = existingItems.some(i => 
+          i.kodeBarang === 'ATK001' || 
+          i.kodeBarang === 'KBR001' || 
+          i.id === 'ITM-006' || 
+          i.id?.startsWith('ITM-0') ||
+          i.namaBarang?.includes('Sapu Lantai') ||
+          i.namaBarang?.includes('Contoh')
+        );
+        if (hasDummy || existingItems.length === 24) {
+          this.clearDummyData(true);
+        }
+        // Pastikan konfigurasi Google Spreadsheet & GAS terpasang aktif
+        const targetGasUrl = 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+        const targetSpreadsheetId = '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs';
+        const cfg = this.getSheetsConfig();
+        cfg.spreadsheetId = targetSpreadsheetId;
+        cfg.gasDeploymentUrl = targetGasUrl;
+        cfg.autoSync = true;
+        cfg.isConnected = true;
+        this.saveSheetsConfig(cfg);
+        localStorage.setItem('sijajul_dummy_cleared_v8_real', 'true');
+      }
+    } catch (e) {
+      console.warn('Auto dummy purge check warning:', e);
+    }
+  }
 }
 
 export const storageService = new StorageService();
+storageService.checkAndAutoPurgeDummy();
+

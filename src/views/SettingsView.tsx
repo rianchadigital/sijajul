@@ -1470,20 +1470,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               </div>
             </div>
 
-            {/* Two Methods Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Three Methods Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Method 1: GitHub Actions Auto Deploy */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="px-2.5 py-0.5 bg-blue-600 text-white text-[11px] font-extrabold rounded-full">
-                      METODE 1 (OTOMATIS &amp; TERBAIK)
+                      METODE 1 (FTP ACTIONS)
                     </span>
-                    <span className="text-[11px] text-slate-500 font-bold">GitHub Actions</span>
+                    <span className="text-[11px] text-slate-500 font-bold">Auto-Deploy</span>
                   </div>
 
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    Deploy Otomatis Setiap Kali Push ke GitHub
+                    Deploy Otomatis via GitHub Actions &amp; FTP
                   </h3>
 
                   <ol className="text-xs text-slate-600 space-y-2.5 list-decimal pl-4 leading-relaxed">
@@ -1494,7 +1494,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                       Buka repositori Anda di <strong>GitHub</strong> &gt; klik <strong>Settings</strong> &gt; <strong>Secrets and variables</strong> &gt; <strong>Actions</strong>.
                     </li>
                     <li>
-                      Klik <strong>New repository secret</strong> dan buat 3 variabel rahasia ini:
+                      Klik <strong>New repository secret</strong> dan buat 3 variabel ini:
                       <div className="mt-1.5 bg-slate-900 text-slate-200 p-2.5 rounded-lg font-mono text-[10px] space-y-1">
                         <div><strong className="text-amber-400">HOSTINGER_FTP_HOST</strong>: ftp.domainanda.com</div>
                         <div><strong className="text-amber-400">HOSTINGER_FTP_USER</strong>: u123456789</div>
@@ -1502,24 +1502,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                       </div>
                     </li>
                     <li>
-                      <strong>Selesai!</strong> Setiap kali Anda push commit ke GitHub, GitHub Actions otomatis menjalankan <code>npm run build</code> dan mengirimkan folder <code>dist/</code> ke Hostinger. Web Anda langsung tampil tanpa blank!
+                      <strong>Selesai!</strong> Setiap kali Anda push commit ke GitHub, GitHub Actions otomatis mengompilasi dan mengunggah ke Hostinger.
                     </li>
                   </ol>
                 </div>
 
                 <div className="pt-3 border-t border-slate-200">
                   <div className="text-[11px] text-slate-500">
-                    File konfigurasi tersimpan di: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">.github/workflows/deploy.yml</code>
+                    File: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">.github/workflows/deploy.yml</code>
                   </div>
                 </div>
               </div>
 
-              {/* Method 2: Manual Upload Build dist */}
+              {/* Method 2: Hostinger Git Deployment (hPanel) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-0.5 bg-purple-600 text-white text-[11px] font-extrabold rounded-full">
+                      METODE 2 (HPANEL GIT)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-bold">Hostinger Git</span>
+                  </div>
+
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Deploy Langsung dari Menu Git hPanel
+                  </h3>
+
+                  <ol className="text-xs text-slate-600 space-y-2.5 list-decimal pl-4 leading-relaxed">
+                    <li>
+                      Pastikan Anda menjalankan <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">npm run build</code> sebelum push agar folder <code>dist/</code> dan <code>assets/</code> tersinkron.
+                    </li>
+                    <li>
+                      Buka <strong>hPanel Hostinger</strong> &gt; menu <strong>Tingkat Lanjut (Advanced)</strong> &gt; <strong>Git</strong>.
+                    </li>
+                    <li>
+                      Masukkan URL Repositori GitHub Anda dan pilih branch <strong>main</strong>. Set Install Directory ke <strong>public_html</strong>.
+                    </li>
+                    <li>
+                      Klik <strong>Buat (Create)</strong> / <strong>Deploy</strong>. Hostinger akan menarik seluruh file.
+                    </li>
+                    <li>
+                      <strong>Anti-Blank Aktif:</strong> File <code>index.php</code> &amp; <code>.htaccess</code> otomatis mengarahkan pengunjung ke bundel aplikasi yang sudah dikompilasi!
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200">
+                  <div className="text-[11px] text-slate-500">
+                    💡 Didukung penuh oleh <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">index.php</code> Hostinger Bridge.
+                  </div>
+                </div>
+              </div>
+
+              {/* Method 3: Manual Upload Build dist */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="px-2.5 py-0.5 bg-emerald-700 text-white text-[11px] font-extrabold rounded-full">
-                      METODE 2 (CEPAT LANGSUNG)
+                      METODE 3 (INSTAN)
                     </span>
                     <span className="text-[11px] text-slate-500 font-bold">File Manager</span>
                   </div>
@@ -1542,17 +1582,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                       Buka <strong>File Manager</strong> di hPanel Hostinger &gt; masuk ke folder <strong>public_html/</strong>.
                     </li>
                     <li>
-                      Unggah seluruh file di dalam <code>dist/</code> (yaitu <code>index.html</code>, folder <code>assets/</code>, dan file <code>.htaccess</code>) langsung ke dalam <code>public_html/</code>.
+                      Unggah seluruh isi file di dalam <code>dist/</code> (yaitu <code>index.html</code>, <code>index.php</code>, <code>assets/</code>, dan <code>.htaccess</code>) langsung ke dalam <code>public_html/</code>.
                     </li>
                     <li>
-                      Buka alamat web domain Anda. Aplikasi SI JAJUL langsung tampil sempurna!
+                      Buka domain Anda. Aplikasi SI JAJUL langsung tampil sempurna!
                     </li>
                   </ol>
                 </div>
 
                 <div className="pt-3 border-t border-slate-200">
                   <div className="text-[11px] text-slate-500">
-                    💡 Tips: Pastikan mengunggah <strong>isi yang ada di dalam dist</strong>, bukan foldernya sendiri.
+                    💡 Tips: Unggah <strong>isi yang ada di dalam dist</strong>, bukan foldernya sendiri.
                   </div>
                 </div>
               </div>
@@ -1565,20 +1605,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                   <Server className="w-4 h-4" />
                   <span>Konfigurasi Rewrite Rule (.htaccess) untuk Server Hostinger:</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">public/.htaccess</span>
+                <span className="text-[10px] text-slate-400 font-mono">.htaccess</span>
               </div>
               <pre className="bg-slate-950 p-3.5 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto leading-relaxed border border-slate-800">
 {`<IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\\.html$ - [L]
+  DirectoryIndex index.php dist/index.html index.html
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f [OR]
+  RewriteCond index.php -f
+  RewriteRule ^index\\.html$ /index.php [L]
+  RewriteRule ^index\\.php$ - [L]
+  RewriteCond %{DOCUMENT_ROOT}/assets/$2 -f
+  RewriteRule ^(.*/)?assets/(.*)$ /assets/$2 [L]
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+  RewriteRule . /index.php [L]
 </IfModule>`}
               </pre>
               <p className="text-[11px] text-slate-400">
-                Aturan rewrite ini otomatis menyalurkan rute SPA (Single Page Application) ke <code>index.html</code>, sehingga saat pengguna me-refresh halaman seperti <code>/stok</code> atau <code>/usulan</code>, tidak akan muncul error 404 Not Found.
+                Aturan rewrite ini otomatis menyalurkan rute SPA (Single Page Application) ke <code>index.php</code> / <code>index.html</code>, sehingga saat pengguna me-refresh halaman seperti <code>/stok</code> atau <code>/usulan</code>, tidak akan muncul error 404 Not Found.
               </p>
             </div>
           </div>

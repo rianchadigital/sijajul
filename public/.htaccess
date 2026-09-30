@@ -1,7 +1,42 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\.html$ - [L]
+
+  # 1. Prioritaskan index.php sebagai pengendali utama di Hostinger
+  DirectoryIndex index.php dist/index.html index.html
+
+  # 2. Jika user/browser meminta index.html secara eksplisit di root dan index.php ada, alihkan ke index.php
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f [OR]
+  RewriteCond index.php -f
+  RewriteRule ^index\.html$ /index.php [L]
+
+  # 3. Biarkan index.php berjalan langsung tanpa di-rewrite
+  RewriteRule ^index\.php$ - [L]
+
+  # 4. Tangani request aset dari sub-rute (misal /stok/assets/... atau /usulan/assets/...)
+  RewriteCond %{DOCUMENT_ROOT}/assets/$2 -f
+  RewriteRule ^(.*/)?assets/(.*)$ /assets/$2 [L]
+
+  RewriteCond %{DOCUMENT_ROOT}/dist/assets/$2 -f
+  RewriteRule ^(.*/)?assets/(.*)$ /dist/assets/$2 [L]
+
+  # 5. Jika file fisik ada di lokasi yang diminta, sajikan langsung
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+
+  # 6. Layani aset statis jika berada di dalam folder dist/
+  RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f [OR]
+  RewriteCond dist/$1 -f
+  RewriteRule ^(.*)$ dist/$1 [L]
+
+  # 7. Rute SPA fallback ke index.php
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f [OR]
+  RewriteCond index.php -f
+  RewriteRule . /index.php [L]
+
+  # 8. Fallback jika server tidak menjalankan PHP atau index.php tidak ada
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]

@@ -2,26 +2,50 @@
   RewriteEngine On
   RewriteBase /
 
-  # Prioritas eksekusi file utama
+  # 1. Prioritaskan index.php sebagai pengendali utama di Hostinger
   DirectoryIndex index.php dist/index.html index.html
 
-  # Layani file statis yang ada di dist/
-  RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f
-  RewriteRule ^(.*)$ /dist/$1 [L]
+  # 2. Jika user/browser meminta index.html secara eksplisit di root dan index.php ada, alihkan ke index.php
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f [OR]
+  RewriteCond index.php -f
+  RewriteRule ^index\.html$ /index.php [L]
 
-  # Biarkan index.php berjalan
+  # 3. Biarkan index.php berjalan langsung tanpa di-rewrite
   RewriteRule ^index\.php$ - [L]
 
-  # Rute fallback SPA untuk semua URL, arahkan ke index.php
+  # 4. Tangani request aset dari sub-rute (misal /stok/assets/... atau /usulan/assets/...)
+  RewriteCond %{DOCUMENT_ROOT}/assets/$2 -f
+  RewriteRule ^(.*/)?assets/(.*)$ /assets/$2 [L]
+
+  RewriteCond %{DOCUMENT_ROOT}/dist/assets/$2 -f
+  RewriteRule ^(.*/)?assets/(.*)$ /dist/assets/$2 [L]
+
+  # 5. Jika file fisik ada di lokasi yang diminta, sajikan langsung
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+
+  # 6. Layani aset statis jika berada di dalam folder dist/
+  RewriteCond %{DOCUMENT_ROOT}/dist/$1 -f [OR]
+  RewriteCond dist/$1 -f
+  RewriteRule ^(.*)$ dist/$1 [L]
+
+  # 7. Rute SPA fallback ke index.php
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f [OR]
+  RewriteCond index.php -f
   RewriteRule . /index.php [L]
+
+  # 8. Fallback jika server tidak menjalankan PHP atau index.php tidak ada
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
 </IfModule>
 
-# Disable directory listing
+# Mencegah listing direktori
 Options -Indexes
 
-# MIME types
+# Header & MIME Types
 <IfModule mod_mime.c>
   AddType application/javascript js mjs
   AddType text/css css
@@ -29,4 +53,15 @@ Options -Indexes
   AddType application/json json
   AddType font/woff woff
   AddType font/woff2 woff2
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>

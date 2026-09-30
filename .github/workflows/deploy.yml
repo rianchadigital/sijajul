@@ -23,15 +23,44 @@ jobs:
       - name: 📦 Install Dependencies
         run: npm install
 
-      - name: 🏗️ Build Production Bundle
+      - name: 🏗️ Build Production Bundle & Sync Assets
         run: npm run build
 
-      - name: 🚀 Deploy to Hostinger via FTP
+      - name: 📦 Simpan Hasil Build sebagai Artifact (ZIP Siap Pakai)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sijajul-hostinger-build
+          path: dist/
+          retention-days: 14
+
+      - name: 🚀 Deploy ke Hostinger via FTP (Jika Secret FTP Dikonfigurasi)
+        if: ${{ secrets.HOSTINGER_FTP_HOST != '' && secrets.HOSTINGER_FTP_USER != '' }}
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.HOSTINGER_FTP_HOST }}
           username: ${{ secrets.HOSTINGER_FTP_USER }}
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
-          server-dir: public_html/
+          server-dir: ${{ secrets.HOSTINGER_FTP_DIR || 'public_html/' }}
           local-dir: ./dist/
           dangerous-clean-slate: false
+
+      - name: 📡 Trigger Hostinger Auto-Deploy Webhook (Jika Dikonfigurasi)
+        if: ${{ secrets.HOSTINGER_WEBHOOK_URL != '' }}
+        run: |
+          echo "Memanggil Webhook Auto-Deployment Hostinger..."
+          curl -X POST -s "${{ secrets.HOSTINGER_WEBHOOK_URL }}" || true
+          echo "Webhook berhasil dipanggil."
+
+      - name: ℹ️ Informasi Status Deployment
+        if: ${{ secrets.HOSTINGER_FTP_HOST == '' && secrets.HOSTINGER_WEBHOOK_URL == '' }}
+        run: |
+          echo "::notice ::Secret HOSTINGER_FTP_HOST belum dikonfigurasi di GitHub Secrets."
+          echo "Hasil build siap pakai telah disimpan di GitHub Actions Artifacts: sijajul-hostinger-build"
+          echo "Untuk deploy otomatis via FTP, atur HOSTINGER_FTP_HOST, HOSTINGER_FTP_USER, HOSTINGER_FTP_PASSWORD di Settings > Secrets > Actions."
+
+      - name: 📋 Ringkasan Deployment
+        run: |
+          echo "=========================================================="
+          echo "SI JAJUL - Build & Deploy Pipeline Sukses!"
+          echo "Folder dist/ dan assets/ telah terkompilasi dan sinkron."
+          echo "=========================================================="

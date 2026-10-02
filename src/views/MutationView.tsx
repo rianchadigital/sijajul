@@ -24,15 +24,35 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState('');
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
+  const isPicSub = currentUser?.role === 'PIC_SUB_GUDANG';
+  const canMutate = isSuperAdmin || isPicBesar || isPicSub;
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const gudangBesar = warehouses.find(w => w.tipeGudang === 'GUDANG_BESAR') || warehouses[0];
+
   const loadData = () => {
     const whs = storageService.getWarehouses();
     const itms = storageService.getItems();
     setWarehouses(whs);
     setItems(itms);
-    if (whs.length > 1) {
+    
+    const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+    const userWh = currentUser ? storageService.resolveWarehouseForUser(currentUser) : whs[0];
+
+    if (isPicBesar) {
+      setSourceWhId(gb.id);
+      const firstSub = whs.find(w => w.id !== gb.id);
+      setTargetWhId(firstSub ? firstSub.id : '');
+    } else if (isPicSub && userWh) {
+      setSourceWhId(userWh.id);
+      const otherSub = whs.find(w => w.id !== userWh.id && w.tipeGudang !== 'GUDANG_BESAR');
+      setTargetWhId(otherSub ? otherSub.id : '');
+    } else if (whs.length > 1) {
       setSourceWhId(whs[0].id);
       setTargetWhId(whs[1].id);
     }
+
     if (itms.length > 0) setSelectedItemId(itms[0].id);
 
     // Get mutation transactions
@@ -42,7 +62,7 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentUser]);
 
   const sourceStock = sourceWhId && selectedItemId 
     ? storageService.getStockByWarehouseAndItem(sourceWhId, selectedItemId).saldo 
@@ -52,10 +72,27 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
 
   const handleProcessMutation = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canMutate) {
+      alert('Anda tidak memiliki izin memproses mutasi barang!');
+      return;
+    }
     if (sourceWhId === targetWhId) {
       alert('Gudang asal dan gudang tujuan mutasi tidak boleh sama!');
       return;
     }
+
+    // Role check: Gudang pustu tidak bisa mengedit gudang besar
+    if (isPicSub) {
+      if (sourceWhId !== userAssignedWarehouse?.id) {
+        alert('Gudang pustu hanya dapat memutasi barang dari unit gudang penugasan sendiri!');
+        return;
+      }
+      if (targetWhId === gudangBesar?.id) {
+        alert('Gudang pustu tidak dapat memutasi langsung ke Gudang Besar tanpa izin Super Admin!');
+        return;
+      }
+    }
+
     if (qty > sourceStock) {
       alert(`Stok di gudang asal tidak mencukupi (${sourceStock} ${currentItem?.satuan})!`);
       return;
@@ -93,7 +130,7 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
       setQty(1);
       loadData();
       onRefreshStats();
-      alert('Mutasi persediaan antar gudang berhasil dibukukan!');
+      alert(`Mutasi persediaan dari ${sourceWh?.namaGudang} ke ${targetWh?.namaGudang} berhasil dibukukan!`);
     } catch (err: any) {
       alert(err.message || 'Gagal memproses mutasi barang');
     }
@@ -112,12 +149,14 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
           </p>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
-        >
-          <Plus className="w-4 h-4" /> Proses Mutasi Barang
-        </button>
+        {canMutate && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
+          >
+            <Plus className="w-4 h-4" /> Proses Mutasi Barang
+          </button>
+        )}
       </div>
 
       {/* Mutation History Table */}
@@ -198,13 +237,25 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
                   <select
                     required
                     value={sourceWhId}
+                    disabled={!isSuperAdmin}
                     onChange={(e) => setSourceWhId(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold disabled:bg-slate-100 disabled:text-slate-600"
                   >
-                    {warehouses.map(w => (
-                      <option key={w.id} value={w.id}>{w.namaGudang}</option>
-                    ))}
+                    {isSuperAdmin ? (
+                      warehouses.map(w => (
+                        <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                      ))
+                    ) : isPicBesar ? (
+                      <option value={gudangBesar.id}>{gudangBesar.namaGudang}</option>
+                    ) : (
+                      userAssignedWarehouse && <option value={userAssignedWarehouse.id}>{userAssignedWarehouse.namaGudang}</option>
+                    )}
                   </select>
+                  {!isSuperAdmin && (
+                    <span className="text-[10px] text-teal-800 font-medium block mt-0.5">
+                      ✓ Terkunci pada unit gudang penugasan
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -215,9 +266,19 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
                     onChange={(e) => setTargetWhId(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold"
                   >
-                    {warehouses.map(w => (
-                      <option key={w.id} value={w.id}>{w.namaGudang}</option>
-                    ))}
+                    {isSuperAdmin ? (
+                      warehouses.filter(w => w.id !== sourceWhId).map(w => (
+                        <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                      ))
+                    ) : isPicBesar ? (
+                      warehouses.filter(w => w.tipeGudang === 'SUB_GUDANG').map(w => (
+                        <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                      ))
+                    ) : (
+                      warehouses.filter(w => w.id !== userAssignedWarehouse?.id && w.tipeGudang !== 'GUDANG_BESAR').map(w => (
+                        <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>

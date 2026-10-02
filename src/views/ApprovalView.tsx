@@ -22,14 +22,22 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
   const [activeTab, setActiveTab] = useState<'PENDING' | 'HISTORY'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modal Process Approval
   const [selectedReq, setSelectedReq] = useState<ItemRequest | null>(null);
   const [approvedItems, setApprovedItems] = useState<{ [barangId: string]: number }>({});
   const [approvalNotes, setApprovalNotes] = useState('');
   const [actionType, setActionType] = useState<'SETUJU' | 'TOLAK'>('SETUJU');
+  const [submitMode, setSubmitMode] = useState<'APPROVE_ONLY' | 'FULFILL_NOW' | 'APPROVE_AND_DROP'>('APPROVE_ONLY');
 
   // Feedback Toast
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string; reqNumber?: string } | null>(null);
+
+  // In-app confirmation modal for Direct Fulfill or Dropping (Avoids iframe window.confirm issues)
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'FULFILL' | 'DROP';
+    req: ItemRequest;
+    notes?: string;
+  } | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   const loadData = () => {
     setRequests(storageService.getRequests());
@@ -101,7 +109,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
     }
 
     try {
-      const itemsPayload = selectedReq.items.map(itm => {
+      const itemsPayload = (selectedReq.items || []).map(itm => {
         const userApprovedVal = approvedItems[itm.barangId];
         const finalVal = actionType === 'SETUJU' 
           ? (userApprovedVal !== undefined ? Number(userApprovedVal) : itm.jumlahDiminta) 
@@ -113,7 +121,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
         };
       });
 
-      const processed = storageService.processApproval(
+      storageService.processApproval(
         selectedReq.id,
         actionType === 'SETUJU' ? 'DISETUJUI' : 'DITOLAK',
         itemsPayload,
@@ -122,16 +130,40 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
 
       const approvedReqNum = selectedReq.nomorPermintaan;
       const targetSubGudang = selectedReq.gudangTujuanNama;
+      const isInternal = selectedReq.gudangAsalId === selectedReq.gudangTujuanId || selectedReq.gudangAsalId !== gudangBesar.id;
+
+      if (actionType === 'SETUJU' && submitMode === 'FULFILL_NOW') {
+        storageService.fulfillInternalRequest(selectedReq.id, approvalNotes || 'Diserahkan langsung kepada pegawai pemohon');
+        setSelectedReq(null);
+        loadData();
+        onRefreshStats();
+        showToast(
+          `Permintaan ${approvedReqNum} untuk ${selectedReq.pemohonNama} BERHASIL DISETUJUI & DISERAHKAN! Saldo stok ${selectedReq.gudangAsalNama} telah dipotong.`, 
+          'success', 
+          approvedReqNum
+        );
+        return;
+      }
+
+      if (actionType === 'SETUJU' && submitMode === 'APPROVE_AND_DROP') {
+        const newDrp = storageService.processDropping(selectedReq.id, approvalNotes || 'Disetujui untuk pengiriman dropping logistik antar pulau');
+        setSelectedReq(null);
+        loadData();
+        onRefreshStats();
+        showToast(`Permintaan ${approvedReqNum} disetujui & Dropping ${newDrp.nomorDropping} berhasil diterbitkan (BAST: ${newDrp.nomorBast})! Membuka menu Dropping.`, 'success', approvedReqNum);
+        onNavigate('dropping');
+        return;
+      }
+
       setSelectedReq(null);
       loadData();
       onRefreshStats();
 
       if (actionType === 'SETUJU') {
-        showToast(
-          `Permintaan ${approvedReqNum} untuk ${targetSubGudang} BERHASIL DISETUJUI! Siap diproses pada menu Dropping.`, 
-          'success', 
-          approvedReqNum
-        );
+        const msg = isInternal
+          ? `Permintaan ${approvedReqNum} untuk ${selectedReq.pemohonNama} BERHASIL DISETUJUI! Siap diserahkan kepada pemohon.`
+          : `Permintaan ${approvedReqNum} untuk ${targetSubGudang} BERHASIL DISETUJUI! Siap diproses pada menu Dropping.`;
+        showToast(msg, 'success', approvedReqNum);
       } else {
         showToast(
           `Permintaan ${approvedReqNum} telah ditolak. Notifikasi telah dikirimkan ke pemohon.`, 
@@ -143,9 +175,92 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
     }
   };
 
-  // Filter requests
-  const pendingList = requests.filter(r => r.status === 'DIAJUKAN' || r.status === 'DIPERIKSA');
-  const historyList = requests.filter(r => r.status !== 'DIAJUKAN' && r.status !== 'DIPERIKSA');
+  const userWh = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userWhId = userWh?.id || currentUser?.gudangId;
+
+  const handleFulfillDirect = (req: ItemRequest) => {
+    setConfirmAction({
+      type: 'FULFILL',
+      req,
+      notes: 'Diserahkan langsung oleh pengelola gudang tempat tugas'
+    });
+  };
+
+  const handleDirectApproveAndFulfill = (req: ItemRequest) => {
+    setConfirmAction({
+      type: 'FULFILL',
+      req,
+      notes: 'Disetujui dan langsung diserahkan kepada pegawai'
+    });
+  };
+
+  const handleDirectApproveAndDrop = (req: ItemRequest) => {
+    setConfirmAction({
+      type: 'DROP',
+      req,
+      notes: 'Pengiriman dropping logistik antar pulau via Kapal'
+    });
+  };
+
+  const executeConfirmAction = () => {
+    if (!confirmAction) return;
+    setIsProcessingAction(true);
+    const { type, req, notes } = confirmAction;
+
+    try {
+      if (type === 'FULFILL') {
+        storageService.processApproval(
+          req.id,
+          'DISETUJUI',
+          (req.items || []).map(i => ({ 
+            barangId: i.barangId, 
+            jumlahDisetujui: i.jumlahDisetujui > 0 ? i.jumlahDisetujui : i.jumlahDiminta 
+          })),
+          notes || 'Disetujui dan langsung diserahkan kepada pegawai'
+        );
+        storageService.fulfillInternalRequest(req.id, notes || 'Diserahkan langsung oleh pengelola gudang tempat tugas');
+        setConfirmAction(null);
+        loadData();
+        onRefreshStats();
+        showToast(`Barang permintaan ${req.nomorPermintaan} berhasil disetujui & diserahkan kepada ${req.pemohonNama}! Stok ${req.gudangAsalNama} telah terpotong.`, 'success');
+      } else {
+        storageService.processApproval(
+          req.id,
+          'DISETUJUI',
+          (req.items || []).map(i => ({ 
+            barangId: i.barangId, 
+            jumlahDisetujui: i.jumlahDisetujui > 0 ? i.jumlahDisetujui : i.jumlahDiminta 
+          })),
+          notes || 'Disetujui untuk pengiriman dropping logistik'
+        );
+        const newDrp = storageService.processDropping(req.id, notes || 'Pengiriman dropping logistik antar pulau');
+        setConfirmAction(null);
+        loadData();
+        onRefreshStats();
+        showToast(`Permintaan ${req.nomorPermintaan} disetujui & Dropping ${newDrp.nomorDropping} berhasil diterbitkan (BAST: ${newDrp.nomorBast}, SBBK: ${newDrp.nomorSbbk})!`, 'success');
+        onNavigate('dropping');
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Gagal memproses aksi permintaan', 'error');
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  // Filter requests based on role
+  const roleFilteredRequests = requests.filter(r => {
+    if (currentUser?.role === 'ADMIN') return true;
+    if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+      return r.gudangAsalId === gudangBesar.id || r.gudangTujuanId === gudangBesar.id;
+    }
+    if (currentUser?.role === 'PIC_SUB_GUDANG') {
+      return r.gudangAsalId === userWhId || r.gudangTujuanId === userWhId;
+    }
+    return false;
+  });
+
+  const pendingList = roleFilteredRequests.filter(r => r.status === 'DIAJUKAN' || r.status === 'DIPERIKSA');
+  const historyList = roleFilteredRequests.filter(r => r.status !== 'DIAJUKAN' && r.status !== 'DIPERIKSA');
 
   const currentList = activeTab === 'PENDING' ? pendingList : historyList;
 
@@ -188,7 +303,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
           </div>
 
           <div className="flex items-center gap-2">
-            {toastMessage.type === 'success' && actionType === 'SETUJU' && (
+            {toastMessage.type === 'success' && actionType === 'SETUJU' && toastMessage.text.includes('Dropping') && (currentUser?.role === 'ADMIN' || currentUser?.role === 'PIC_GUDANG_BESAR') && (
               <button
                 id="btn-toast-ke-dropping"
                 onClick={() => onNavigate('dropping')}
@@ -308,9 +423,9 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
 
                 {/* Items preview pills */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {req.items.map((itm, idx) => (
+                  {(req.items || []).map((itm, idx) => (
                     <span key={idx} className="bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 rounded font-medium border border-slate-200">
-                      {itm.namaBarang} (<strong>{itm.jumlahDisetujui ?? itm.jumlahDiminta}</strong> {itm.satuan})
+                      {itm.namaBarang || itm.kodeBarang} (<strong>{itm.jumlahDisetujui ?? itm.jumlahDiminta}</strong> {itm.satuan})
                     </span>
                   ))}
                 </div>
@@ -334,22 +449,53 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
               {/* Action Buttons */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 {activeTab === 'PENDING' ? (
-                  <button
-                    id={`btn-review-req-${req.id}`}
-                    onClick={() => handleOpenProcessModal(req)}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
-                  >
-                    <CheckSquare className="w-4 h-4" /> Review & Setujui
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      id={`btn-review-req-${req.id}`}
+                      onClick={() => handleOpenProcessModal(req)}
+                      className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                    >
+                      <CheckSquare className="w-4 h-4" /> Review & Setujui
+                    </button>
+
+                    {(req.gudangAsalId === req.gudangTujuanId || req.gudangAsalId !== gudangBesar.id) ? (
+                      <button
+                        id={`btn-direct-fulfill-${req.id}`}
+                        onClick={() => handleDirectApproveAndFulfill(req)}
+                        className="px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                        title="Setujui dan langsung serahkan barang kepada pegawai"
+                      >
+                        <Package className="w-4 h-4" /> Kirim / Serahkan Langsung
+                      </button>
+                    ) : (currentUser?.role === 'ADMIN' || currentUser?.role === 'PIC_GUDANG_BESAR') && (
+                      <button
+                        id={`btn-direct-drop-${req.id}`}
+                        onClick={() => handleDirectApproveAndDrop(req)}
+                        className="px-3.5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                        title="Setujui dan lanjutkan ke pembuatan dokumen dropping logistik"
+                      >
+                        <Truck className="w-4 h-4" /> Setujui & Kirim Dropping
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    {req.status === 'DISETUJUI' && (
+                    {req.status === 'DISETUJUI' && req.gudangAsalId === gudangBesar.id && (currentUser?.role === 'ADMIN' || currentUser?.role === 'PIC_GUDANG_BESAR') && (
                       <button
                         onClick={() => onNavigate('dropping')}
                         className="px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                        title="Lanjutkan ke proses pengiriman dropping logistik"
+                        title="Lanjutkan ke proses pengiriman dropping logistik dari Gudang Besar"
                       >
                         <Truck className="w-3.5 h-3.5" /> Proses Dropping
+                      </button>
+                    )}
+                    {req.status === 'DISETUJUI' && req.gudangAsalId !== gudangBesar.id && (
+                      <button
+                        onClick={() => handleFulfillDirect(req)}
+                        className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        title="Serahkan barang persediaan langsung ke pegawai pemohon"
+                      >
+                        <Package className="w-3.5 h-3.5" /> Serahkan Barang
                       </button>
                     )}
                     <button
@@ -459,7 +605,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {selectedReq.items.map((itm) => {
+                        {(selectedReq.items || []).map((itm) => {
                           const stock = getGudangBesarStock(itm.barangId, selectedReq.gudangAsalId);
                           const isInsufficient = stock < itm.jumlahDiminta;
                           const currentApprovedVal = approvedItems[itm.barangId] ?? itm.jumlahDiminta;
@@ -510,8 +656,13 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
 
               {/* Approval / Rejection Notes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Catatan / Instruksi Pengiriman {actionType === 'TOLAK' ? '<span className="text-rose-600 font-bold">*Wajib Diisi Alasan Penolakan</span>' : '(Opsional)'}
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <span>Catatan / Instruksi Pengiriman</span>
+                  {actionType === 'TOLAK' ? (
+                    <span className="text-rose-600 font-bold">*Wajib Diisi Alasan Penolakan</span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">(Opsional)</span>
+                  )}
                 </label>
                 <textarea
                   rows={2}
@@ -532,27 +683,159 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
                 >
                   Batal
                 </button>
-                <button
-                  id="btn-submit-keputusan-approval"
-                  type="submit"
-                  className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
-                    actionType === 'SETUJU' ? 'bg-teal-800 hover:bg-teal-900' : 'bg-rose-600 hover:bg-rose-700'
-                  }`}
-                >
-                  {actionType === 'SETUJU' ? (
-                    <>
+                {actionType === 'SETUJU' ? (
+                  <>
+                    {(selectedReq.gudangAsalId === selectedReq.gudangTujuanId || selectedReq.gudangAsalId !== gudangBesar.id) ? (
+                      <button
+                        id="btn-submit-approve-and-fulfill"
+                        type="submit"
+                        onClick={() => setSubmitMode('FULFILL_NOW')}
+                        className="px-4 py-2.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Package className="w-4 h-4" />
+                        <span>Setujui & Langsung Kirim / Serahkan Barang</span>
+                      </button>
+                    ) : (currentUser?.role === 'ADMIN' || currentUser?.role === 'PIC_GUDANG_BESAR') && (
+                      <button
+                        id="btn-submit-approve-and-drop"
+                        type="submit"
+                        onClick={() => setSubmitMode('APPROVE_AND_DROP')}
+                        className="px-4 py-2.5 text-xs font-bold text-white bg-teal-700 hover:bg-teal-800 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Truck className="w-4 h-4" />
+                        <span>Setujui & Buka Dropping</span>
+                      </button>
+                    )}
+                    <button
+                      id="btn-submit-approve-only"
+                      type="submit"
+                      onClick={() => setSubmitMode('APPROVE_ONLY')}
+                      className="px-4 py-2.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
                       <CheckCircle className="w-4 h-4" />
-                      <span>Simpan & Setujui Permintaan</span>
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="w-4 h-4" />
-                      <span>Tolak Permintaan Ini</span>
-                    </>
-                  )}
-                </button>
+                      <span>Setujui Saja</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    id="btn-submit-reject"
+                    type="submit"
+                    className="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Tolak Permintaan Ini</span>
+                  </button>
+                )}
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* CONFIRMATION ACTION MODAL (Direct Fulfill or Dropping) */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-in zoom-in-95 my-8">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className={`p-2.5 rounded-xl ${confirmAction.type === 'FULFILL' ? 'bg-emerald-100 text-emerald-800' : 'bg-teal-100 text-teal-800'}`}>
+                {confirmAction.type === 'FULFILL' ? <Package className="w-5 h-5" /> : <Truck className="w-5 h-5" />}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">
+                  {confirmAction.type === 'FULFILL' ? 'Konfirmasi Penyerahan Barang' : 'Konfirmasi Penerbitan & Kirim Dropping'}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono">
+                  {confirmAction.req.nomorPermintaan}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 my-4 text-xs">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pemohon:</span>
+                  <strong className="text-slate-800">{confirmAction.req.pemohonNama}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Gudang Asal (Potong Stok):</span>
+                  <strong className="text-slate-800">{confirmAction.req.gudangAsalNama}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Gudang Tujuan:</span>
+                  <strong className="text-teal-800 font-bold">{confirmAction.req.gudangTujuanNama}</strong>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-bold text-slate-700 block mb-1.5">Daftar Barang yang Akan Diserahkan / Dikirim:</span>
+                <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                  {(confirmAction.req.items || []).map((itm, idx) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-50">
+                      <div>
+                        <div className="font-bold text-slate-800">{itm.namaBarang}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{itm.kodeBarang}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className="px-2 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg font-bold">
+                          {itm.jumlahDisetujui > 0 ? itm.jumlahDisetujui : itm.jumlahDiminta} {itm.satuan}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Catatan Pengiriman / Serah Terima:
+                </label>
+                <input
+                  type="text"
+                  value={confirmAction.notes || ''}
+                  onChange={(e) => setConfirmAction({ ...confirmAction, notes: e.target.value })}
+                  placeholder={confirmAction.type === 'FULFILL' ? 'Contoh: Diserahkan langsung ke pegawai pemohon' : 'Contoh: Dikirim via Kapal Dinas Kesehatan'}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
+                />
+              </div>
+
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-[11px] text-teal-900 leading-relaxed">
+                {confirmAction.type === 'FULFILL'
+                  ? 'Sistem akan otomatis memotong saldo fisik pada gudang asal, menyetujui permohonan, dan mencatat transaksi pengeluaran langsung.'
+                  : 'Sistem akan otomatis memotong saldo Gudang Besar, menyetujui permohonan, menerbitkan nomor Dropping, serta membuat dokumen resmi BAST dan SBBK.'}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                disabled={isProcessingAction}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={executeConfirmAction}
+                disabled={isProcessingAction}
+                className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  confirmAction.type === 'FULFILL' 
+                    ? 'bg-emerald-700 hover:bg-emerald-800' 
+                    : 'bg-teal-700 hover:bg-teal-800'
+                }`}
+              >
+                {confirmAction.type === 'FULFILL' ? (
+                  <>
+                    <Package className="w-4 h-4" />
+                    <span>{isProcessingAction ? 'Memproses...' : 'Ya, Kirim & Serahkan Sekarang'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-4 h-4" />
+                    <span>{isProcessingAction ? 'Memproses...' : 'Ya, Terbitkan Dokumen & Kirim Dropping'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

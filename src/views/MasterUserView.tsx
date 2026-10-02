@@ -609,7 +609,7 @@ export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onS
                   const isDefaultPass = !u.password || u.password === '123456';
 
                   return (
-                    <tr key={u.id} className={`hover:bg-slate-50/80 transition-colors ${isCurrent ? 'bg-teal-50/40' : ''}`}>
+                    <tr key={`${u.id}-${u.username || ''}-${idx}`} className={`hover:bg-slate-50/80 transition-colors ${isCurrent ? 'bg-teal-50/40' : ''}`}>
                       <td className="px-4 py-3.5 text-center text-slate-400 font-mono">{idx + 1}</td>
                       
                       {/* Name & NIP */}

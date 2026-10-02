@@ -39,7 +39,13 @@ export const SbbkView: React.FC<SbbkViewProps> = ({ currentUser }) => {
     window.print();
   };
 
+  const userWh = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userWhId = userWh?.id || currentUser?.gudangId;
+
   const filteredSbbks = sbbks.filter(s => {
+    if (currentUser?.role === 'PIC_SUB_GUDANG' && userWhId && s.gudangTujuanId !== userWhId && s.gudangAsalId !== userWhId) {
+      return false;
+    }
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (

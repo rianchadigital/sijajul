@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Filter, FileText, Trash2, 
-  AlertCircle, CheckCircle, Clock, Eye, AlertTriangle, ArrowRight, UserCheck, RefreshCw, Building2, MapPin
+  AlertCircle, CheckCircle, Clock, Eye, AlertTriangle, ArrowRight, UserCheck, RefreshCw, Building2, MapPin, Send
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { ItemRequest, Item, Warehouse, User } from '../types';
@@ -33,6 +33,8 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
 
   // Modal Detail State
   const [selectedRequest, setSelectedRequest] = useState<ItemRequest | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = () => {
     setRequests(storageService.getRequests());
@@ -68,13 +70,19 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
   };
 
   const gudangBesar = warehouses.find(w => w.tipeGudang === 'GUDANG_BESAR') || warehouses[0];
-  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : (warehouses[0] || null);
+  
+  // Origin warehouse:
+  // For Pegawai: automatically their assigned workplace warehouse
+  // For PIC Sub Gudang: Gudang Besar (as supplier of dropping)
+  // For Admin: Gudang Besar or selectable
+  const originWarehouse = currentUser?.role === 'PEGAWAI' ? (userAssignedWarehouse || gudangBesar) : gudangBesar;
   const activeTargetWarehouse = warehouses.find(w => w.id === targetWarehouseId) || userAssignedWarehouse || warehouses[0];
 
-  // Helper to get stock of an item in Gudang Besar
-  const getGudangBesarStock = (barangId: string) => {
-    if (!gudangBesar || !barangId) return 0;
-    return storageService.getStockByWarehouseAndItem(gudangBesar.id, barangId).saldo;
+  // Helper to get stock of an item in origin warehouse
+  const getOriginStock = (barangId: string) => {
+    if (!originWarehouse || !barangId) return 0;
+    return storageService.getStockByWarehouseAndItem(originWarehouse.id, barangId).saldo;
   };
 
   const handleAddItemRow = () => {
@@ -94,16 +102,26 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
 
     // Validation
-    const validItems = formItems.filter(i => i.barangId && i.jumlahDiminta > 0);
+    const validItems = formItems.filter(i => i.barangId && Number(i.jumlahDiminta) > 0);
     if (validItems.length === 0) {
-      alert('Pilih minimal satu barang dan masukkan jumlah permintaan!');
+      setModalError('Pilih minimal satu barang dan masukkan jumlah permintaan yang valid!');
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      storageService.createRequest(validItems, catatanPemohon, targetWarehouseId);
+      if (currentUser?.role === 'PEGAWAI') {
+        const assignedWh = userAssignedWarehouse || warehouses[0];
+        storageService.createRequest(validItems, catatanPemohon, assignedWh.id, assignedWh.id);
+      } else if (currentUser?.role === 'PIC_SUB_GUDANG') {
+        const subWh = userAssignedWarehouse || warehouses[0];
+        storageService.createRequest(validItems, catatanPemohon, subWh.id, gudangBesar.id);
+      } else {
+        storageService.createRequest(validItems, catatanPemohon, targetWarehouseId, gudangBesar.id);
+      }
       setShowCreateModal(false);
       setCatatanPemohon('');
       setFormItems([{ barangId: '', jumlahDiminta: 1, keterangan: '' }]);
@@ -112,22 +130,28 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
       setFeedbackMsg('Permintaan berhasil diajukan!');
       setTimeout(() => setFeedbackMsg(null), 3000);
     } catch (err: any) {
-      alert(err.message || 'Gagal membuat permintaan');
+      setModalError(err.message || 'Gagal membuat permintaan. Silakan coba lagi.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Filter list
   const filteredRequests = requests.filter(req => {
-    // Role check: Pegawai can only see requests from their own warehouse/assigned workplace or made by them
+    const userWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+
     if (currentUser?.role === 'PEGAWAI') {
-      const userWhId = userAssignedWarehouse?.id || currentUser.gudangId;
-      if (req.gudangTujuanId !== userWhId && req.pemohonId !== currentUser.id) {
+      if (req.gudangTujuanId !== userWhId && req.gudangAsalId !== userWhId && req.pemohonId !== currentUser.id) {
         return false;
       }
     }
     if (currentUser?.role === 'PIC_SUB_GUDANG') {
-      const userWhId = userAssignedWarehouse?.id || currentUser.gudangId;
-      if (req.gudangTujuanId !== userWhId && req.pemohonId !== currentUser.id) {
+      if (req.gudangTujuanId !== userWhId && req.gudangAsalId !== userWhId && req.pemohonId !== currentUser.id) {
+        return false;
+      }
+    }
+    if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+      if (req.gudangAsalId !== gudangBesar.id && req.gudangTujuanId !== gudangBesar.id) {
         return false;
       }
     }
@@ -338,6 +362,14 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4 overflow-y-auto flex-1 pr-1">
+              {/* Modal Error Banner */}
+              {modalError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs font-semibold flex items-center justify-between shadow-2xs">
+                  <span>{modalError}</span>
+                  <button type="button" onClick={() => setModalError(null)} className="text-rose-500 hover:text-rose-800 font-bold ml-2">✕</button>
+                </div>
+              )}
+
               {/* Requester Profile Preview Card */}
               <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div>
@@ -406,7 +438,7 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                 <div className="space-y-3">
                   {formItems.map((itemRow, idx) => {
                     const selectedItem = items.find(i => i.id === itemRow.barangId);
-                    const stockBesar = itemRow.barangId ? getGudangBesarStock(itemRow.barangId) : 0;
+                    const originStock = itemRow.barangId ? getOriginStock(itemRow.barangId) : 0;
 
                     return (
                       <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 relative space-y-2">
@@ -441,15 +473,17 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                             </select>
                           </div>
 
-                          {/* Stock Gudang Besar Preview */}
+                          {/* Stock Origin Warehouse Preview */}
                           <div className="sm:col-span-3 flex items-center">
                             {itemRow.barangId ? (
                               <div className={`text-xs px-2.5 py-1 rounded-lg border w-full text-center ${
-                                stockBesar === 0 
+                                originStock === 0 
                                   ? 'bg-rose-50 border-rose-200 text-rose-700 font-bold' 
                                   : 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold'
                               }`}>
-                                Stok Gudang Induk: {stockBesar} {selectedItem?.satuan}
+                                {currentUser?.role === 'PEGAWAI'
+                                  ? `Stok Tempat Tugas: ${originStock} ${selectedItem?.satuan || ''}`
+                                  : `Stok Gudang Induk: ${originStock} ${selectedItem?.satuan || ''}`}
                               </div>
                             ) : (
                               <div className="text-[11px] text-slate-400 italic">Pilih barang dahulu</div>
@@ -516,9 +550,11 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-teal-800 hover:bg-teal-900 text-white rounded-xl shadow-xs transition-colors"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 text-xs font-bold bg-teal-800 hover:bg-teal-900 disabled:bg-slate-300 text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  Kirim Permintaan
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? 'Mengirim...' : 'Kirim Permintaan'}</span>
                 </button>
               </div>
             </form>

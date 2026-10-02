@@ -22,6 +22,12 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
   const [opnameInputs, setOpnameInputs] = useState<{ [barangId: string]: { fisik: number; notes: string } }>({});
   const [petugasOpname, setPetugasOpname] = useState(currentUser?.nama || 'Petugas Gudang');
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
+  const isPicSub = currentUser?.role === 'PIC_SUB_GUDANG';
+  const canOpname = isSuperAdmin || isPicBesar || isPicSub;
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
   const loadData = () => {
     const whs = storageService.getWarehouses();
     const itms = storageService.getItems();
@@ -30,14 +36,21 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
     setItems(itms);
     setStocks(stks);
 
-    if (whs.length > 0 && !selectedWarehouseId) {
+    if (!isSuperAdmin) {
+      if (isPicBesar) {
+        const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+        setSelectedWarehouseId(gb.id);
+      } else if (userAssignedWarehouse) {
+        setSelectedWarehouseId(userAssignedWarehouse.id);
+      }
+    } else if (whs.length > 0 && !selectedWarehouseId) {
       setSelectedWarehouseId(whs[0].id);
     }
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentUser]);
 
   // When warehouse changes, initialize physical counts with system stock
   useEffect(() => {
@@ -158,6 +171,18 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
 
   return (
     <div className="space-y-6">
+      {!isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-amber-800">Pembatasan Akses Opname:</span>
+            <span>Gudang-gudang Pustu hanya dapat meng-opname unit gudang penugasan sendiri. Hanya Super Admin yang dapat meng-opname semua gudang.</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+            {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -176,12 +201,14 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
           >
             <Download className="w-3.5 h-3.5" /> Export Excel
           </button>
-          <button
-            onClick={handleSaveOpname}
-            className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-          >
-            <Save className="w-4 h-4" /> Simpan & Rekonsiliasi Saldo
-          </button>
+          {canOpname && (
+            <button
+              onClick={handleSaveOpname}
+              className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+            >
+              <Save className="w-4 h-4" /> Simpan & Rekonsiliasi Saldo
+            </button>
+          )}
         </div>
       </div>
 
@@ -194,11 +221,20 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800"
+            disabled={!isSuperAdmin}
+            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800 disabled:bg-slate-100 disabled:text-slate-500"
           >
-            {warehouses.map(w => (
-              <option key={w.id} value={w.id}>{w.namaGudang}</option>
-            ))}
+            {isSuperAdmin ? (
+              warehouses.map(w => (
+                <option key={w.id} value={w.id}>{w.namaGudang}</option>
+              ))
+            ) : isPicBesar ? (
+              warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR').map(w => (
+                <option key={w.id} value={w.id}>{w.namaGudang}</option>
+              ))
+            ) : (
+              userAssignedWarehouse && <option value={userAssignedWarehouse.id}>{userAssignedWarehouse.namaGudang}</option>
+            )}
           </select>
         </div>
 

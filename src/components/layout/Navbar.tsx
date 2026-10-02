@@ -209,9 +209,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Pilih Akun Pengguna (Simulasi)
                 </div>
                 <div className="max-h-64 overflow-y-auto py-1">
-                  {users.map((u) => (
+                  {users.map((u, idx) => (
                     <button
-                      key={u.id}
+                      key={`${u.id}-${u.username || ''}-${idx}`}
                       onClick={() => {
                         handleSwitch(u);
                         setShowSwitchMenu(false);

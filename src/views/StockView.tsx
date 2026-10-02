@@ -33,11 +33,24 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
   const [adjustQty, setAdjustQty] = useState<number>(1);
   const [adjustNotes, setAdjustNotes] = useState<string>('');
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
   const loadData = () => {
-    setWarehouses(storageService.getWarehouses());
+    const whs = storageService.getWarehouses();
+    setWarehouses(whs);
     setCategories(storageService.getCategories());
     setItems(storageService.getItems());
     setStocks(storageService.getStocks());
+
+    if (!isSuperAdmin) {
+      if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+        const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+        setSelectedWarehouseId(gb.id);
+      } else if (userAssignedWarehouse) {
+        setSelectedWarehouseId(userAssignedWarehouse.id);
+      }
+    }
   };
 
   useEffect(() => {
@@ -45,7 +58,20 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
     const handleUpdate = () => loadData();
     window.addEventListener('sijajul_data_updated', handleUpdate);
     return () => window.removeEventListener('sijajul_data_updated', handleUpdate);
-  }, []);
+  }, [currentUser]);
+
+  // Permission helper
+  const canAdjustStock = (warehouseId: string) => {
+    if (isSuperAdmin) return true;
+    if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+      const wh = warehouses.find(w => w.id === warehouseId);
+      return wh?.tipeGudang === 'GUDANG_BESAR';
+    }
+    if (currentUser?.role === 'PIC_SUB_GUDANG') {
+      return warehouseId === userAssignedWarehouse?.id;
+    }
+    return false;
+  };
 
   // Filter items and prepare display records
   const filteredRecords = items.flatMap(item => {
@@ -178,6 +204,18 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
 
   return (
     <div className="space-y-6">
+      {!isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-amber-800">Pembatasan Akses Gudang:</span>
+            <span>Gudang-gudang Pustu tidak dapat mengedit Gudang Besar atau gudang lain. Hanya Super Admin yang dapat melihat dan mengedit seluruh gudang.</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+            {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
+          </span>
+        </div>
+      )}
+
       {/* Page Title & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -185,7 +223,9 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
             Stok Persediaan Multi Gudang
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Monitoring posisi saldo stok fisik di Gudang Besar dan seluruh Sub Gudang Pulau.
+            {isSuperAdmin
+              ? 'Monitoring posisi saldo stok fisik di Gudang Besar dan seluruh Sub Gudang Pulau.'
+              : `Monitoring posisi saldo stok di ${userAssignedWarehouse?.namaGudang || 'Gudang Penugasan'}.`}
           </p>
         </div>
 
@@ -225,12 +265,21 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
             <select
               value={selectedWarehouseId}
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
-              className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white font-medium text-slate-700"
+              disabled={!isSuperAdmin && currentUser?.role !== 'PIC_GUDANG_BESAR'}
+              className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white font-medium text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
             >
-              <option value="ALL">Semua Gudang (Multi Gudang)</option>
-              {warehouses.map(wh => (
-                <option key={wh.id} value={wh.id}>{wh.namaGudang}</option>
-              ))}
+              {isSuperAdmin && <option value="ALL">Semua Gudang (Multi Gudang)</option>}
+              {isSuperAdmin ? (
+                warehouses.map(wh => (
+                  <option key={wh.id} value={wh.id}>{wh.namaGudang}</option>
+                ))
+              ) : currentUser?.role === 'PIC_GUDANG_BESAR' ? (
+                warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR').map(wh => (
+                  <option key={wh.id} value={wh.id}>{wh.namaGudang}</option>
+                ))
+              ) : (
+                userAssignedWarehouse && <option value={userAssignedWarehouse.id}>{userAssignedWarehouse.namaGudang}</option>
+              )}
             </select>
           </div>
 
@@ -339,7 +388,7 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
                         >
                           <CreditCard className="w-4 h-4" />
                         </button>
-                        {canAdjust && (
+                        {canAdjustStock(record.warehouse.id) && (
                           <button
                             onClick={() => handleOpenAdjust(record)}
                             title="Penyesuaian Stok Cepat"

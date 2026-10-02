@@ -87,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'approval', 
           label: 'Approval Permintaan', 
           icon: CheckSquare, 
-          roles: ['ADMIN', 'PIC_GUDANG_BESAR'],
+          roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG'],
           badge: approvalCount > 0 ? `${approvalCount}` : undefined,
           badgeColor: 'bg-rose-500 text-white font-bold'
         },
@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'master_barang', label: 'Master Barang', icon: Package, roles: ['ADMIN', 'PIC_GUDANG_BESAR'] },
         { id: 'master_kategori', label: 'Master Kategori', icon: Layers, roles: ['ADMIN'] },
-        { id: 'master_gudang', label: 'Master Gudang', icon: Building2, roles: ['ADMIN'] },
+        { id: 'master_gudang', label: 'Master Gudang', icon: Building2, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG'] },
         { id: 'master_pegawai', label: 'Manajemen Pengguna & Akun', icon: Users, roles: ['ADMIN'] },
         { id: 'pengaturan', label: 'Pengaturan & GAS Sync', icon: Settings, roles: ['ADMIN'] },
         { id: 'audit_log', label: 'Log Aktivitas', icon: History, roles: ['ADMIN'] },

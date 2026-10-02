@@ -19,15 +19,27 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
   useEffect(() => {
     const whs = storageService.getWarehouses();
     const itms = storageService.getItems();
     setWarehouses(whs);
     setItems(itms);
 
-    if (whs.length > 0) setSelectedWarehouseId(whs[0].id);
+    if (currentUser?.role === 'ADMIN') {
+      if (whs.length > 0) setSelectedWarehouseId(whs[0].id);
+    } else if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+      const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+      setSelectedWarehouseId(gb.id);
+    } else {
+      const assigned = currentUser ? storageService.resolveWarehouseForUser(currentUser) : whs[0];
+      setSelectedWarehouseId(assigned.id);
+    }
+
     if (itms.length > 0) setSelectedItemId(itms[0].id);
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     if (selectedWarehouseId && selectedItemId) {
@@ -92,13 +104,28 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800"
+            disabled={!isSuperAdmin}
+            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800 disabled:bg-slate-100 disabled:text-slate-500"
           >
-            {warehouses.map(w => (
-              <option key={w.id} value={w.id}>
-                {w.namaGudang} ({w.tipeGudang === 'GUDANG_BESAR' ? 'Gudang Pusat' : 'Sub Gudang'})
-              </option>
-            ))}
+            {isSuperAdmin ? (
+              warehouses.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.namaGudang} ({w.tipeGudang === 'GUDANG_BESAR' ? 'Gudang Pusat' : 'Sub Gudang'})
+                </option>
+              ))
+            ) : currentUser?.role === 'PIC_GUDANG_BESAR' ? (
+              warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR').map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.namaGudang} (Gudang Pusat)
+                </option>
+              ))
+            ) : (
+              userAssignedWarehouse && (
+                <option value={userAssignedWarehouse.id}>
+                  {userAssignedWarehouse.namaGudang} (Sub Gudang Penugasan)
+                </option>
+              )
+            )}
           </select>
         </div>
 

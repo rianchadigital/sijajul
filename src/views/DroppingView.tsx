@@ -30,11 +30,18 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
 
   // Modal Detail Dropping
   const [selectedDropping, setSelectedDropping] = useState<Dropping | null>(null);
+  const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const loadData = () => {
+    const whs = storageService.getWarehouses();
     setDroppings(storageService.getDroppings());
     setApprovedRequests(storageService.getRequests().filter(r => r.status === 'DISETUJUI'));
-    setWarehouses(storageService.getWarehouses());
+    setWarehouses(whs);
   };
 
   useEffect(() => {
@@ -44,7 +51,7 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
   const handleCreateDropping = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRequestId) {
-      alert('Pilih permohonan yang telah disetujui untuk diproses dropping!');
+      showToast('Pilih permohonan yang telah disetujui untuk diproses dropping!', 'error');
       return;
     }
 
@@ -55,9 +62,9 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
       setDroppingNotes('');
       loadData();
       onRefreshStats();
-      alert(`Dropping logistik berhasil diproses!\nNomor Dokumen:\n- ${newDropping.nomorDropping}\n- BAST: ${newDropping.nomorBast}\n- SBBK: ${newDropping.nomorSbbk}`);
+      showToast(`Dropping logistik berhasil diterbitkan! Nomor Dropping: ${newDropping.nomorDropping}, BAST: ${newDropping.nomorBast}, SBBK: ${newDropping.nomorSbbk}`, 'success');
     } catch (err: any) {
-      alert(err.message || 'Gagal memproses dropping');
+      showToast(err.message || 'Gagal memproses dropping', 'error');
     }
   };
 
@@ -65,7 +72,7 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
     if (!bastId) return;
     const bast = storageService.getBastDocs().find(b => b.id === bastId || b.nomorBast === bastId);
     if (!bast) {
-      alert('Dokumen BAST tidak ditemukan');
+      showToast('Dokumen BAST tidak ditemukan', 'error');
       return;
     }
     const doc = PdfService.generateBastPdf(bast);
@@ -76,14 +83,23 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
     if (!sbbkId) return;
     const sbbk = storageService.getSbbkDocs().find(s => s.id === sbbkId || s.nomorSbbk === sbbkId);
     if (!sbbk) {
-      alert('Dokumen SBBK tidak ditemukan');
+      showToast('Dokumen SBBK tidak ditemukan', 'error');
       return;
     }
     const doc = PdfService.generateSbbkPdf(sbbk);
     doc.save(`SBBK_${sbbk.nomorSbbk.replace(/\//g, '_')}.pdf`);
   };
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
+  const canCreateDropping = isSuperAdmin || isPicBesar;
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+
   const filteredDroppings = droppings.filter(drp => {
+    if (!isSuperAdmin && !isPicBesar && userWhId && drp.gudangTujuanId !== userWhId) {
+      return false;
+    }
     if (selectedWarehouseFilter !== 'ALL' && drp.gudangTujuanId !== selectedWarehouseFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -98,6 +114,21 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`p-4 rounded-2xl text-xs font-semibold flex items-center justify-between border shadow-md animate-in fade-in-50 duration-200 ${
+          toast.type === 'success' 
+            ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+            : 'bg-rose-50 text-rose-900 border-rose-300'
+        }`}>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-700" />
+            <span>{toast.text}</span>
+          </div>
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600 font-bold ml-2">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -109,12 +140,21 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
           </p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
-        >
-          <Plus className="w-4 h-4" /> Proses Dropping Baru ({approvedRequests.length} Siap)
-        </button>
+        {canCreateDropping ? (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
+          >
+            <Plus className="w-4 h-4" /> Proses Dropping Baru ({approvedRequests.length} Siap)
+          </button>
+        ) : (
+          <button
+            onClick={() => onNavigate('receiving')}
+            className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
+          >
+            <Truck className="w-4 h-4" /> Buka Menu Penerimaan Dropping
+          </button>
+        )}
       </div>
 
       {/* Filter Toolbar */}
@@ -262,7 +302,7 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
                     <option value="">-- Pilih Nomor Permintaan --</option>
                     {approvedRequests.map(req => (
                       <option key={req.id} value={req.id}>
-                        {req.nomorPermintaan} - Tujuan: {req.gudangTujuanNama} ({req.items.length} item)
+                        {req.nomorPermintaan} - Tujuan: {req.gudangTujuanNama} ({(req.items || []).length} item)
                       </option>
                     ))}
                   </select>

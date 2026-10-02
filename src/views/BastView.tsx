@@ -46,7 +46,13 @@ export const BastView: React.FC<BastViewProps> = ({ currentUser }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const userWh = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userWhId = userWh?.id || currentUser?.gudangId;
+
   const filteredBasts = basts.filter(b => {
+    if (currentUser?.role === 'PIC_SUB_GUDANG' && userWhId && b.gudangTujuanId !== userWhId && b.gudangAsalId !== userWhId) {
+      return false;
+    }
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (

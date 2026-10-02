@@ -27,15 +27,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
   const [requests, setRequests] = useState<ItemRequest[]>([]);
   const [droppings, setDroppings] = useState<Dropping[]>([]);
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
   useEffect(() => {
-    setWarehouses(storageService.getWarehouses());
+    const whs = storageService.getWarehouses();
+    setWarehouses(whs);
     setCategories(storageService.getCategories());
     setItems(storageService.getItems());
     setStocks(storageService.getStocks());
     setTransactions(storageService.getTransactions());
     setRequests(storageService.getRequests());
     setDroppings(storageService.getDroppings());
-  }, []);
+
+    if (!isSuperAdmin) {
+      if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+        const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+        setSelectedWarehouseId(gb.id);
+      } else if (userAssignedWarehouse) {
+        setSelectedWarehouseId(userAssignedWarehouse.id);
+      }
+    }
+  }, [currentUser]);
 
   const reportTitles: Record<string, string> = {
     'STOK_SEMUA': 'Laporan Stok Persediaan Semua Gudang',
@@ -221,6 +234,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
 
   return (
     <div className="space-y-6">
+      {!isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-amber-800">Pembatasan Laporan:</span>
+            <span>Gudang-gudang Pustu hanya dapat melihat laporan unit gudang penugasan sendiri. Hanya Super Admin yang dapat melihat dan mencetak laporan seluruh gudang.</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+            {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -308,12 +333,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
             <select
               value={selectedWarehouseId}
               onChange={(e) => setSelectedWarehouseId(e.target.value)}
-              className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+              disabled={!isSuperAdmin}
+              className="w-full py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600 disabled:bg-slate-100 disabled:text-slate-500"
             >
-              <option value="ALL">Semua Gudang</option>
-              {warehouses.map(w => (
-                <option key={w.id} value={w.id}>{w.namaGudang}</option>
-              ))}
+              {isSuperAdmin && <option value="ALL">Semua Gudang</option>}
+              {isSuperAdmin ? (
+                warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                ))
+              ) : currentUser?.role === 'PIC_GUDANG_BESAR' ? (
+                warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR').map(w => (
+                  <option key={w.id} value={w.id}>{w.namaGudang}</option>
+                ))
+              ) : (
+                userAssignedWarehouse && <option value={userAssignedWarehouse.id}>{userAssignedWarehouse.namaGudang}</option>
+              )}
             </select>
           </div>
 

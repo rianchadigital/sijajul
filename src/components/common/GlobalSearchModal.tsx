@@ -207,9 +207,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 <UserIcon className="w-3.5 h-3.5 text-emerald-600" /> Data Pegawai ({filteredUsers.length})
               </div>
               <div className="space-y-1">
-                {filteredUsers.map(u => (
+                {filteredUsers.map((u, idx) => (
                   <button
-                    key={u.id}
+                    key={`${u.id}-${u.username || ''}-${idx}`}
                     onClick={() => { onNavigate('pegawai'); onClose(); }}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 flex items-center justify-between group transition-colors"
                   >

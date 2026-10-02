@@ -334,9 +334,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 <div className="space-y-2 max-h-[330px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
-                  {users.map((u) => (
+                  {users.map((u, idx) => (
                     <div
-                      key={u.id}
+                      key={`${u.id}-${u.username || ''}-${idx}`}
                       onClick={() => handleQuickLogin(u)}
                       className="p-3 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-teal-500 rounded-2xl cursor-pointer transition-all flex items-center justify-between group"
                     >

@@ -31,7 +31,14 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
     loadData();
   }, []);
 
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
   const handleOpenCreate = () => {
+    if (!isSuperAdmin) {
+      alert('Hanya Super Admin yang berwenang menambahkan unit gudang!');
+      return;
+    }
     setEditingWarehouse(null);
     setKodeGudang(`GDG-${Date.now().toString().slice(-3)}`);
     setNamaGudang('');
@@ -45,11 +52,15 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
   };
 
   const handleOpenEdit = (w: Warehouse) => {
+    if (!isSuperAdmin) {
+      alert('Gudang pustu tidak dapat mengedit Gudang Besar atau gudang lain. Hanya Super Admin yang berwenang mengedit data gudang!');
+      return;
+    }
     setEditingWarehouse(w);
     setKodeGudang(w.kodeGudang);
     setNamaGudang(w.namaGudang);
     setTipeGudang(w.tipeGudang);
-    setLokasiPulau(w.lokasiPulau);
+    setLokasiPulau(w.lokasiPulau || w.lokasi || '');
     setPicNama(w.picNama);
     setPicNip(w.picNip || '');
     setPicKontak(w.picKontak || '');
@@ -59,6 +70,10 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      alert('Hanya Super Admin yang berwenang menyimpan perubahan gudang!');
+      return;
+    }
     const whData: Warehouse = {
       id: editingWarehouse ? editingWarehouse.id : `WH-${Date.now()}`,
       kodeGudang,
@@ -76,36 +91,61 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
   };
 
   const handleDelete = (id: string, name: string) => {
+    if (!isSuperAdmin) {
+      alert('Hanya Super Admin yang berwenang menghapus gudang!');
+      return;
+    }
     if (confirm(`Yakin ingin menghapus gudang "${name}"?`)) {
       storageService.deleteWarehouse(id);
       loadData();
     }
   };
 
-  const filtered = warehouses.filter(w => {
+  // Rule: Hanya Super Admin yang dapat melihat semua gudang. Gudang pustu hanya melihat gudang penugasannya.
+  const visibleWarehouses = isSuperAdmin
+    ? warehouses
+    : warehouses.filter(w => w.id === userAssignedWarehouse?.id);
+
+  const filtered = visibleWarehouses.filter(w => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return w.namaGudang.toLowerCase().includes(q) || w.lokasiPulau.toLowerCase().includes(q) || w.picNama.toLowerCase().includes(q);
+    return w.namaGudang.toLowerCase().includes(q) || (w.lokasiPulau || w.lokasi || '').toLowerCase().includes(q) || w.picNama.toLowerCase().includes(q);
   });
 
   return (
     <div className="space-y-6">
+      {!isSuperAdmin && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="font-bold text-amber-800">Perhatian Hak Akses:</span>
+            <span>Gudang-gudang Pustu tidak dapat mengedit Gudang Besar dan gudang lainnya. Hanya Super Admin yang dapat melihat semua gudang dan melakukan pengeditan.</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+            Penugasan: {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
             Master Data Lokasi Gudang
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Struktur hierarki Gudang Besar Puskesmas Kecamatan dan Sub Gudang Satelit Pulau.
+            {isSuperAdmin 
+              ? 'Struktur hierarki Gudang Besar Puskesmas Kecamatan dan seluruh Sub Gudang Satelit Pulau.'
+              : `Informasi unit gudang penugasan Anda (${userAssignedWarehouse?.namaGudang || 'Sub Gudang'}).`}
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreate}
-          className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
-        >
-          <Plus className="w-4 h-4" /> Tambah Sub Gudang
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={handleOpenCreate}
+            className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all"
+          >
+            <Plus className="w-4 h-4" /> Tambah Sub Gudang
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
@@ -155,24 +195,28 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
 
             <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
               <span className="text-[11px] text-slate-400 truncate max-w-[150px]">{w.keterangan || 'Siap operasional'}</span>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleOpenEdit(w)}
-                  className="p-1.5 text-slate-600 hover:text-teal-800 hover:bg-slate-100 rounded-lg"
-                  title="Edit"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                {w.tipeGudang !== 'GUDANG_BESAR' && (
+              {isSuperAdmin ? (
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={() => handleDelete(w.id, w.namaGudang)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
-                    title="Hapus"
+                    onClick={() => handleOpenEdit(w)}
+                    className="p-1.5 text-slate-600 hover:text-teal-800 hover:bg-slate-100 rounded-lg"
+                    title="Edit Data Gudang"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Edit2 className="w-3.5 h-3.5" />
                   </button>
-                )}
-              </div>
+                  {w.tipeGudang !== 'GUDANG_BESAR' && (
+                    <button
+                      onClick={() => handleDelete(w.id, w.namaGudang)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                      title="Hapus Gudang"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[10px] text-slate-400 italic">Hanya Baca</span>
+              )}
             </div>
           </div>
         ))}

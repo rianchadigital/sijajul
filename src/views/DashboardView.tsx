@@ -188,7 +188,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, curren
             </div>
           </div>
           <div className="text-2xl font-black text-slate-800">{totalStockSum.toLocaleString()}</div>
-          <p className="text-[10px] text-emerald-600 font-medium mt-1">5 Gudang Terdata</p>
+          <p className="text-[10px] text-emerald-600 font-medium mt-1">{warehouses.length} Gudang Terdata</p>
         </div>
 
         {/* Stok Menipis */}

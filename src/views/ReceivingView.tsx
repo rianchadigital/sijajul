@@ -25,6 +25,12 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
   const [confirmingDropping, setConfirmingDropping] = useState<Dropping | null>(null);
   const [itemConditions, setItemConditions] = useState<{ [barangId: string]: { condition: string; notes: string } }>({});
   const [receiverNotes, setReceiverNotes] = useState('');
+  const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const loadData = () => {
     setDroppings(storageService.getDroppings());
@@ -38,7 +44,7 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
   const handleOpenConfirm = (drp: Dropping) => {
     setConfirmingDropping(drp);
     const initialCond: { [barangId: string]: { condition: string; notes: string } } = {};
-    drp.items.forEach(itm => {
+    (drp.items || []).forEach(itm => {
       initialCond[itm.barangId] = { condition: 'Baik & Utuh', notes: '' };
     });
     setItemConditions(initialCond);
@@ -50,7 +56,7 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
     if (!confirmingDropping) return;
 
     try {
-      const itemsPayload = confirmingDropping.items.map(itm => ({
+      const itemsPayload = (confirmingDropping.items || []).map(itm => ({
         barangId: itm.barangId,
         kondisiBarang: itemConditions[itm.barangId]?.condition || 'Baik & Utuh',
         keterangan: itemConditions[itm.barangId]?.notes || ''
@@ -60,9 +66,9 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
       setConfirmingDropping(null);
       loadData();
       onRefreshStats();
-      alert('Penerimaan barang berhasil dikonfirmasi! Stok Sub Gudang telah bertambah secara otomatis.');
+      showToast('Penerimaan barang berhasil dikonfirmasi! Stok Sub Gudang telah bertambah secara otomatis.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Gagal mengonfirmasi penerimaan barang');
+      showToast(err.message || 'Gagal mengonfirmasi penerimaan barang', 'error');
     }
   };
 
@@ -70,7 +76,7 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
     if (!bastId) return;
     const bast = storageService.getBastDocs().find(b => b.id === bastId || b.nomorBast === bastId);
     if (!bast) {
-      alert('Dokumen BAST tidak ditemukan');
+      showToast('Dokumen BAST tidak ditemukan', 'error');
       return;
     }
     const doc = PdfService.generateBastPdf(bast);
@@ -78,15 +84,18 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
   };
 
   // Filter based on user's warehouse if PIC Sub Gudang
+  const userWh = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+  const userWhId = userWh?.id || currentUser?.gudangId;
+
   const incomingList = droppings.filter(d => {
     if (d.status === 'SELESAI' || d.status === 'DITERIMA') return false;
-    if (currentUser?.role === 'PIC_SUB_GUDANG' && d.gudangTujuanId !== currentUser.gudangId) return false;
+    if (currentUser?.role === 'PIC_SUB_GUDANG' && userWhId && d.gudangTujuanId !== userWhId) return false;
     return true;
   });
 
   const historyList = droppings.filter(d => {
     if (d.status !== 'SELESAI' && d.status !== 'DITERIMA') return false;
-    if (currentUser?.role === 'PIC_SUB_GUDANG' && d.gudangTujuanId !== currentUser.gudangId) return false;
+    if (currentUser?.role === 'PIC_SUB_GUDANG' && userWhId && d.gudangTujuanId !== userWhId) return false;
     return true;
   });
 
@@ -104,6 +113,18 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`p-4 rounded-2xl text-xs font-semibold flex items-center justify-between border shadow-md animate-in fade-in-50 duration-200 ${
+          toast.type === 'success' 
+            ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+            : 'bg-rose-50 text-rose-900 border-rose-300'
+        }`}>
+          <span>{toast.text}</span>
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600 font-bold ml-2">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

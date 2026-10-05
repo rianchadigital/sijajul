@@ -12,7 +12,12 @@ import {
   INITIAL_TRANSACTIONS, INITIAL_ACTIVITY_LOGS, INITIAL_NOTIFICATIONS, 
   DEFAULT_NUMBER_CONFIG, DEFAULT_SHEETS_CONFIG, INITIAL_PROPOSALS
 } from '../data/initialData';
-import { DEFAULT_LOGO_JAYA_RAYA, DEFAULT_LOGO_KESEHATAN } from '../data/defaultLogos';
+import { 
+  DEFAULT_LOGO_JAYA_RAYA, 
+  DEFAULT_LOGO_KESEHATAN,
+  DEFAULT_DRIVE_ASSET_ID,
+  getGoogleDriveThumbnailUrl
+} from '../data/defaultLogos';
 
 export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
   provider: 'FONNTE',
@@ -32,8 +37,11 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
 };
 
 export const DEFAULT_LOGO_CONFIG: AppLogoConfig = {
-  logoJayaRaya: DEFAULT_LOGO_JAYA_RAYA,
-  logoKesehatan: DEFAULT_LOGO_KESEHATAN,
+  logoJayaRaya: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400),
+  logoKesehatan: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400),
+  driveAssetId: DEFAULT_DRIVE_ASSET_ID,
+  driveAssetUrl: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 800),
+  useDriveAsset: true,
   namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
   namaDinas: 'DINAS KESEHATAN',
   namaPuskesmas: 'PUSKESMAS KECAMATAN KEPULAUAN SERIBU SELATAN',
@@ -99,8 +107,12 @@ class StorageService {
           STORAGE_KEYS.WAREHOUSES, STORAGE_KEYS.CATEGORIES
         ];
         if (mutatingKeys.includes(key)) {
-          window.dispatchEvent(new CustomEvent('sijajul_data_mutated', { detail: { key } }));
-          window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { key } }));
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sijajul_data_mutated', { detail: { key } }));
+              window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { key } }));
+            }
+          }, 0);
         }
       }
     } catch (e) {
@@ -109,8 +121,33 @@ class StorageService {
   }
 
   // Users & Auth
+  purgeLocalUsersCache(): void {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEYS.USERS);
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+        localStorage.removeItem('sijajul_users_source_spreadsheet_v5');
+        localStorage.setItem('sijajul_users_purged_demo_accounts_v12', 'true');
+        window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'purgeUsers' } }));
+      } catch (e) {
+        console.warn('Gagal menghapus cache user:', e);
+      }
+    }
+  }
+
   getUsers(): User[] {
-    const rawUsers = this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    // Pastikan cache akun mock lama di lokal browser dihapus secara bersih
+    if (typeof window !== 'undefined') {
+      try {
+        if (localStorage.getItem('sijajul_users_purged_demo_accounts_v12') !== 'true') {
+          localStorage.removeItem(STORAGE_KEYS.USERS);
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+          localStorage.setItem('sijajul_users_purged_demo_accounts_v12', 'true');
+        }
+      } catch {}
+    }
+
+    const rawUsers = this.getItem<User[]>(STORAGE_KEYS.USERS, []);
     const seenIds = new Set<string>();
     const seenNips = new Set<string>();
     const seenUsernames = new Set<string>();
@@ -124,14 +161,28 @@ class StorageService {
       return `USR-${String(fallbackSeq).padStart(3, '0')}`;
     };
 
-    // 1. Process candidate users from storage, deduplicating strictly by ID, NIP, and username
-    const candidates = Array.isArray(rawUsers) && rawUsers.length > 0 ? rawUsers : INITIAL_USERS;
+    // Helper untuk mendeteksi dan mengeliminasi akun demo sepenuhnya
+    const isDemoUserAccount = (u: any): boolean => {
+      if (!u) return false;
+      const nama = String(u.nama || '').toLowerCase().trim();
+      const nip = String(u.nip || '').trim();
+      const username = String(u.username || '').toLowerCase().trim();
+      if (u.isDemo === true) return true;
+      if (nip === '197805122005011003') return true; // dr. Ahmad Zulkarnain
+      if (nama.includes('zulkarnain') || nama.includes('dr. ahmad')) return true;
+      if (nama === 'user demo' || nama.includes('akun demo') || username === 'demo') return true;
+      return false;
+    };
+
+    // Process candidate users from storage, deduplicating strictly by ID, NIP, and username, and FILTERING OUT DEMO ACCOUNTS
+    const rawCandidates = Array.isArray(rawUsers) && rawUsers.length > 0 ? rawUsers : INITIAL_USERS;
+    const candidates = rawCandidates.filter(u => !isDemoUserAccount(u));
 
     candidates.forEach((u, idx) => {
       if (!u) return;
       let cleanId = formatCleanId(u.id, idx + 1);
-      const cleanNip = (u.nip || '').trim();
-      const cleanUsername = (u.username || (u.nip ? u.nip : u.nama.toLowerCase().replace(/\s+/g, '_').slice(0, 15))).trim().toLowerCase();
+      const cleanNip = String(u.nip || '').trim();
+      const cleanUsername = String(u.username || (u.nip ? u.nip : u.nama.toLowerCase().replace(/\s+/g, '_').slice(0, 15))).trim().toLowerCase();
 
       // Check for duplicates
       const idTaken = seenIds.has(cleanId);
@@ -151,8 +202,8 @@ class StorageService {
           // Same person already in list: merge details into existing user
           const existing = uniqueUsers.find(ex => 
             ex.id === cleanId || 
-            (cleanNip && ex.nip && ex.nip.trim() === cleanNip) ||
-            (cleanUsername && ex.username && ex.username.trim().toLowerCase() === cleanUsername)
+            (cleanNip && ex.nip && String(ex.nip).trim() === cleanNip) ||
+            (cleanUsername && ex.username && String(ex.username).trim().toLowerCase() === cleanUsername)
           );
           if (existing) {
             existing.password = existing.password || u.password || '123456';
@@ -180,40 +231,6 @@ class StorageService {
       });
     });
 
-    // 2. Ensure all INITIAL_USERS exist without duplicating IDs or accounts
-    INITIAL_USERS.forEach((initU, initIdx) => {
-      const cleanInitId = formatCleanId(initU.id, initIdx + 1);
-      const cleanInitNip = (initU.nip || '').trim();
-      const cleanInitUsername = (initU.username || '').trim().toLowerCase();
-
-      const existsById = seenIds.has(cleanInitId);
-      const existsByNip = cleanInitNip ? seenNips.has(cleanInitNip) : false;
-      const existsByUsername = cleanInitUsername ? seenUsernames.has(cleanInitUsername) : false;
-
-      if (!existsById && !existsByNip && !existsByUsername) {
-        let cleanId = cleanInitId;
-        if (seenIds.has(cleanId)) {
-          let seq = 1;
-          while (seenIds.has(`USR-${String(seq).padStart(3, '0')}`)) {
-            seq++;
-          }
-          cleanId = `USR-${String(seq).padStart(3, '0')}`;
-        }
-
-        seenIds.add(cleanId);
-        if (cleanInitNip) seenNips.add(cleanInitNip);
-        if (cleanInitUsername) seenUsernames.add(cleanInitUsername);
-
-        uniqueUsers.push({
-          ...initU,
-          id: cleanId,
-          password: initU.password || '123456',
-          username: cleanInitUsername
-        });
-        needsSave = true;
-      }
-    });
-
     // 3. Absolute final verification: every item strictly unique by ID
     const finalSet = new Set<string>();
     const finalUsers: User[] = [];
@@ -235,7 +252,9 @@ class StorageService {
     });
 
     if (needsSave || finalUsers.length !== rawUsers.length) {
-      this.setItem(STORAGE_KEYS.USERS, finalUsers);
+      setTimeout(() => {
+        this.setItem(STORAGE_KEYS.USERS, finalUsers);
+      }, 0);
     }
     return finalUsers;
   }
@@ -367,12 +386,17 @@ class StorageService {
     this.recordAuditLog('DELETE', 'MASTER_USER', `Menghapus user ID ${id}`);
   }
 
-  importUsersFromSpreadsheetRows(rows: any[], currentUser?: User): { success: boolean; importedCount: number; updatedCount: number; message: string; users: User[] } {
+  importUsersFromSpreadsheetRows(
+    rows: any[], 
+    currentUser?: User, 
+    replaceAll = false
+  ): { success: boolean; importedCount: number; updatedCount: number; message: string; users: User[] } {
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return { success: false, importedCount: 0, updatedCount: 0, message: 'Tidak ada baris data pengguna yang valid.', users: this.getUsers() };
     }
 
-    const existingUsers = this.getUsers();
+    // Jika replaceAll = true, bersihkan semua akun lokal mock/lama dan ganti hanya dengan data spreadsheet
+    const existingUsers = replaceAll ? [] : this.getUsers();
     const warehouses = this.getWarehouses();
     let importedCount = 0;
     let updatedCount = 0;
@@ -415,6 +439,14 @@ class StorageService {
       }
 
       if (!nama && !username && !nip) return; // Skip empty row
+
+      // Abaikan dan lewati sepenuhnya jika terdeteksi akun demo
+      const checkNama = nama.toLowerCase();
+      const checkUser = username.toLowerCase();
+      const checkNip = nip.trim();
+      if (checkNama.includes('zulkarnain') || checkNama.includes('dr. ahmad') || checkNama.includes('demo') || checkUser === 'demo' || checkNip === '197805122005011003') {
+        return;
+      }
 
       // Normalize Role
       let role: Role = 'PEGAWAI';
@@ -543,7 +575,24 @@ class StorageService {
   }
 
   getCurrentUser(): User | null {
-    return this.getItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    const user = this.getItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    const isDemo = (u: any) => {
+      if (!u) return false;
+      const n = String(u.nama || '').toLowerCase();
+      const nip = String(u.nip || '').trim();
+      const un = String(u.username || '').toLowerCase();
+      return n.includes('zulkarnain') || n.includes('demo') || nip === '197805122005011003' || un === 'demo';
+    };
+
+    if (!user || isDemo(user)) {
+      const activeUsers = this.getUsers();
+      const fallback = activeUsers[0] || INITIAL_USERS[0] || null;
+      if (fallback) {
+        this.setItem(STORAGE_KEYS.CURRENT_USER, fallback);
+      }
+      return fallback;
+    }
+    return user;
   }
 
   setCurrentUser(user: User | null): void {
@@ -663,11 +712,12 @@ class StorageService {
 
   // Items
   getItems(): Item[] {
-    const items = this.getItem<Item[]>(STORAGE_KEYS.ITEMS, INITIAL_ITEMS);
-    if (!items || items.length === 0) {
-      this.saveItems(INITIAL_ITEMS);
-      return INITIAL_ITEMS;
-    }
+    const rawItems = this.getItem<Item[]>(STORAGE_KEYS.ITEMS, INITIAL_ITEMS);
+    const items = (rawItems || []).filter(i => {
+      const n = (i.namaBarang || '').toLowerCase();
+      const k = (i.kodeBarang || '').toLowerCase();
+      return !n.includes('paracetamol') && !k.includes('pct');
+    });
     return items;
   }
 
@@ -937,12 +987,10 @@ class StorageService {
 
   // Stocks
   getStocks(): WarehouseStock[] {
-    const stocks = this.getItem<WarehouseStock[]>(STORAGE_KEYS.STOCKS, generateInitialStocks());
-    if (!stocks || stocks.length === 0) {
-      const init = generateInitialStocks();
-      this.saveStocks(init);
-      return init;
-    }
+    const rawStocks = this.getItem<WarehouseStock[]>(STORAGE_KEYS.STOCKS, generateInitialStocks());
+    const stocks = (rawStocks || []).filter(s => {
+      return s.barangId !== 'ITM-001' && !s.barangId?.toLowerCase().includes('pct');
+    });
     return stocks;
   }
 
@@ -2425,9 +2473,8 @@ class StorageService {
       }
     }
 
-    // 4. Permintaan Barang
-    if (Array.isArray(sheetData.requests) && sheetData.requests.length > 0) {
-      const existingRequests = this.getRequests();
+    // 4. Permintaan Barang - Spreadsheet adalah Single Source of Truth
+    if (Array.isArray(sheetData.requests)) {
       const requestsList: ItemRequest[] = sheetData.requests.map((row: any, idx: number) => {
         let items: any[] = [];
         try {
@@ -2435,52 +2482,36 @@ class StorageService {
         } catch (e) {}
 
         const reqId = row['ID Permintaan'] || row['id'] || `REQ-${idx + 1}`;
-        const existing = existingRequests.find(r => r.id === reqId || r.nomorPermintaan === row['Nomor Permintaan']);
 
         return {
           id: reqId,
           nomorPermintaan: row['Nomor Permintaan'] || row['nomorPermintaan'] || `REQ-${idx + 1}`,
           tanggalPermintaan: row['Tanggal'] || row['tanggalPermintaan'] || nowIso.slice(0, 10),
-          pemohonId: existing?.pemohonId || row['ID Pemohon'] || 'USR-003',
-          pemohonNama: row['Nama Pemohon'] || existing?.pemohonNama || 'Petugas',
-          pemohonNip: row['NIP Pemohon'] || existing?.pemohonNip || '-',
-          pemohonJabatan: existing?.pemohonJabatan || 'Petugas',
-          tempatTugas: row['Nama Gudang Pemohon'] || existing?.tempatTugas || 'Puskesmas',
-          gudangAsalId: existing?.gudangAsalId || 'GUD-001',
-          gudangAsalNama: existing?.gudangAsalNama || 'Gudang Puskesmas Kepulauan Seribu Selatan',
-          gudangTujuanId: row['ID Gudang Pemohon'] || existing?.gudangTujuanId || 'GUD-002',
-          gudangTujuanNama: row['Nama Gudang Pemohon'] || existing?.gudangTujuanNama || 'Gudang Tujuan',
-          status: row['Status Approval'] || row['status'] || existing?.status || 'DIAJUKAN',
-          catatanPemohon: row['Keperluan'] || existing?.catatanPemohon || '',
-          catatanApproval: row['Catatan Verifikasi'] || existing?.catatanApproval || '',
-          tanggalApproval: row['Tanggal Approval'] || existing?.tanggalApproval || '',
-          items: items.length > 0 ? items : (existing?.items || []),
-          createdAt: row['Tanggal'] || existing?.createdAt || nowIso,
-          updatedAt: row['Tanggal Approval'] || existing?.updatedAt || nowIso
+          pemohonId: row['ID Pemohon'] || 'USR-001',
+          pemohonNama: row['Nama Pemohon'] || 'Petugas',
+          pemohonNip: row['NIP Pemohon'] || '-',
+          pemohonJabatan: row['Jabatan Pemohon'] || 'Petugas',
+          tempatTugas: row['Nama Gudang Pemohon'] || 'Puskesmas',
+          gudangAsalId: 'GUD-001',
+          gudangAsalNama: 'Gudang Puskesmas Kepulauan Seribu Selatan',
+          gudangTujuanId: row['ID Gudang Pemohon'] || 'GUD-002',
+          gudangTujuanNama: row['Nama Gudang Pemohon'] || 'Gudang Tujuan',
+          status: row['Status Approval'] || row['status'] || 'DIAJUKAN',
+          catatanPemohon: row['Keperluan'] || '',
+          catatanApproval: row['Catatan Verifikasi'] || '',
+          tanggalApproval: row['Tanggal Approval'] || '',
+          items: items,
+          createdAt: row['Tanggal'] || nowIso,
+          updatedAt: row['Tanggal Approval'] || nowIso
         };
       });
 
-      const mergedRequests = [...existingRequests];
-      requestsList.forEach(incoming => {
-        const idxFound = mergedRequests.findIndex(r => r.id === incoming.id || r.nomorPermintaan === incoming.nomorPermintaan);
-        if (idxFound >= 0) {
-          mergedRequests[idxFound] = {
-            ...mergedRequests[idxFound],
-            ...incoming,
-            items: (incoming.items && incoming.items.length > 0) ? incoming.items : mergedRequests[idxFound].items
-          };
-        } else {
-          mergedRequests.push(incoming);
-        }
-      });
-
-      this.saveRequests(mergedRequests);
-      counts.requests = mergedRequests.length;
+      this.saveRequests(requestsList);
+      counts.requests = requestsList.length;
     }
 
-    // 5. Dropping Logistik
-    if (Array.isArray(sheetData.droppings) && sheetData.droppings.length > 0) {
-      const existingDroppings = this.getDroppings();
+    // 5. Dropping Logistik - Spreadsheet adalah Single Source of Truth
+    if (Array.isArray(sheetData.droppings)) {
       const droppingsList: Dropping[] = sheetData.droppings.map((row: any, idx: number) => {
         let items: any[] = [];
         try {
@@ -2488,50 +2519,35 @@ class StorageService {
         } catch (e) {}
 
         const dropId = row['ID Dropping'] || row['id'] || `DRP-${idx + 1}`;
-        const existing = existingDroppings.find(d => d.id === dropId || d.nomorDropping === row['Nomor Dropping']);
 
         return {
           id: dropId,
           nomorDropping: row['Nomor Dropping'] || row['nomorDropping'] || `DRP-${idx + 1}`,
-          permintaanId: row['Nomor Permintaan'] || existing?.permintaanId || `REQ-${idx + 1}`,
-          nomorPermintaan: row['Nomor Permintaan'] || existing?.nomorPermintaan || '',
-          tanggalDropping: row['Tanggal Kirim'] || existing?.tanggalDropping || nowIso.slice(0, 10),
-          gudangAsalId: existing?.gudangAsalId || 'GUD-001',
-          gudangAsalNama: row['Gudang Asal'] || existing?.gudangAsalNama || 'Gudang Besar KSS',
-          gudangTujuanId: existing?.gudangTujuanId || 'GUD-002',
-          gudangTujuanNama: row['Gudang Tujuan'] || existing?.gudangTujuanNama || 'Sub Gudang',
-          petugasPengirimId: existing?.petugasPengirimId || 'USR-002',
-          petugasPengirimNama: row['Petugas Pengirim'] || existing?.petugasPengirimNama || 'Petugas Pengirim',
-          penerimaNama: row['Petugas Penerima'] || existing?.penerimaNama || '',
-          status: row['Status Pengiriman'] || existing?.status || 'DIKIRIM',
-          keterangan: row['Catatan'] || existing?.keterangan || '',
-          items: items.length > 0 ? items : (existing?.items || []),
-          nomorBast: row['Nomor BAST'] || existing?.nomorBast || '',
-          nomorSbbk: existing?.nomorSbbk || '',
-          createdAt: row['Tanggal Kirim'] || existing?.createdAt || nowIso
+          permintaanId: row['Nomor Permintaan'] || `REQ-${idx + 1}`,
+          nomorPermintaan: row['Nomor Permintaan'] || '',
+          tanggalDropping: row['Tanggal Kirim'] || nowIso.slice(0, 10),
+          gudangAsalId: 'GUD-001',
+          gudangAsalNama: row['Gudang Asal'] || 'Gudang Besar KSS',
+          gudangTujuanId: 'GUD-002',
+          gudangTujuanNama: row['Gudang Tujuan'] || 'Sub Gudang',
+          petugasPengirimId: 'USR-001',
+          petugasPengirimNama: row['Petugas Pengirim'] || 'Petugas Pengirim',
+          penerimaNama: row['Petugas Penerima'] || '',
+          status: row['Status Pengiriman'] || 'DIKIRIM',
+          keterangan: row['Catatan'] || '',
+          items: items,
+          nomorBast: row['Nomor BAST'] || '',
+          nomorSbbk: '',
+          createdAt: row['Tanggal Kirim'] || nowIso
         };
       });
 
-      const mergedDroppings = [...existingDroppings];
-      droppingsList.forEach(incoming => {
-        const idxFound = mergedDroppings.findIndex(d => d.id === incoming.id || d.nomorDropping === incoming.nomorDropping);
-        if (idxFound >= 0) {
-          mergedDroppings[idxFound] = {
-            ...mergedDroppings[idxFound],
-            ...incoming,
-            items: (incoming.items && incoming.items.length > 0) ? incoming.items : mergedDroppings[idxFound].items
-          };
-        } else {
-          mergedDroppings.push(incoming);
-        }
-      });
-
-      this.saveDroppings(mergedDroppings);
-      counts.droppings = mergedDroppings.length;
+      this.saveDroppings(droppingsList);
+      counts.droppings = droppingsList.length;
     }
 
-    // 6. Transaksi Mutasi
-    if (Array.isArray(sheetData.transactions) && sheetData.transactions.length > 0) {
+    // 6. Transaksi Mutasi - Spreadsheet adalah Single Source of Truth
+    if (Array.isArray(sheetData.transactions)) {
       const trxList: StockTransaction[] = sheetData.transactions.map((row: any, idx: number) => {
         return {
           id: row['ID Transaksi'] || row['id'] || `TRX-${idx + 1}`,
@@ -2556,10 +2572,8 @@ class StorageService {
         };
       });
 
-      if (trxList.length > 0) {
-        this.saveTransactions(trxList);
-        counts.transactions = trxList.length;
-      }
+      this.saveTransactions(trxList);
+      counts.transactions = trxList.length;
     }
 
     // 7. Pengguna Sistem
@@ -2577,7 +2591,7 @@ class StorageService {
     this.recordAuditLog(
       'SYNC_PULL',
       'DATABASE',
-      `Otomatis memperbarui data dari Spreadsheet: ${counts.items} barang, ${counts.stocks} baris stok, ${counts.warehouses} gudang.`
+      `Otomatis memperbarui data dari Spreadsheet: ${counts.items} barang, ${counts.stocks} baris stok, ${counts.warehouses} gudang, ${counts.requests} permintaan, ${counts.droppings} dropping.`
     );
 
     if (typeof window !== 'undefined') {
@@ -2587,27 +2601,50 @@ class StorageService {
     return {
       success: true,
       counts,
-      message: `Berhasil menyelaraskan ${counts.items} barang, ${counts.stocks} catatan saldo stok, ${counts.warehouses} gudang, dan ${counts.users} pegawai langsung dari Google Spreadsheet!`
+      message: `Berhasil menyelaraskan ${counts.items} barang, ${counts.stocks} catatan saldo stok, ${counts.warehouses} gudang, ${counts.requests} permintaan, ${counts.droppings} dropping, dan ${counts.users} pegawai langsung dari Google Spreadsheet!`
     };
   }
 
   checkAndAutoPurgeDummy(): void {
     try {
       if (typeof window === 'undefined') return;
-      const flag = localStorage.getItem('sijajul_dummy_cleared_v8_real');
+      const flag = localStorage.getItem('sijajul_purge_demo_transactions_and_requests_v20');
       if (!flag) {
-        const existingItems = this.getItems();
-        const hasDummy = existingItems.some(i => 
-          i.kodeBarang === 'ATK001' || 
-          i.kodeBarang === 'KBR001' || 
-          i.id === 'ITM-006' || 
-          i.id?.startsWith('ITM-0') ||
-          i.namaBarang?.includes('Sapu Lantai') ||
-          i.namaBarang?.includes('Contoh')
-        );
-        if (hasDummy || existingItems.length === 24) {
-          this.clearDummyData(true);
-        }
+        // Bersihkan seluruh data permintaan, logistik, transaksi mutasi, BAST, SBBK demo dari lokal browser
+        this.setItem(STORAGE_KEYS.REQUESTS, []);
+        this.setItem(STORAGE_KEYS.DROPPINGS, []);
+        this.setItem(STORAGE_KEYS.BAST_DOCS, []);
+        this.setItem(STORAGE_KEYS.SBBK_DOCS, []);
+        this.setItem(STORAGE_KEYS.MUTATIONS, []);
+        this.setItem(STORAGE_KEYS.OPNAMES, []);
+        this.setItem(STORAGE_KEYS.TRANSACTIONS, []);
+        this.setItem(STORAGE_KEYS.PROPOSALS, []);
+        this.setItem(STORAGE_KEYS.ACTIVITY_LOGS, []);
+
+        // Hapus akun demo dari lokal
+        const users = this.getUsers().filter(u => !isDemoUser(u));
+        this.saveUsers(users);
+
+        // Bersihkan Paracetamol dari daftar barang jika ada
+        const items = this.getItems().filter(i => {
+          const n = (i.namaBarang || '').toLowerCase();
+          const k = (i.kodeBarang || '').toLowerCase();
+          return !n.includes('paracetamol') && !k.includes('pct');
+        });
+        this.saveItems(items);
+
+        // Pasang konfigurasi logo dengan asset Google Drive yang diberikan pengguna
+        const currentLogo = this.getLogoConfig();
+        const driveLogoUrl = getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400);
+        this.saveLogoConfig({
+          ...currentLogo,
+          driveAssetId: DEFAULT_DRIVE_ASSET_ID,
+          driveAssetUrl: driveLogoUrl,
+          logoJayaRaya: driveLogoUrl,
+          logoKesehatan: driveLogoUrl,
+          useDriveAsset: true
+        });
+
         // Pastikan konfigurasi Google Spreadsheet & GAS terpasang aktif
         const targetGasUrl = 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
         const targetSpreadsheetId = '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs';
@@ -2617,7 +2654,9 @@ class StorageService {
         cfg.autoSync = true;
         cfg.isConnected = true;
         this.saveSheetsConfig(cfg);
-        localStorage.setItem('sijajul_dummy_cleared_v8_real', 'true');
+
+        localStorage.setItem('sijajul_purge_demo_transactions_and_requests_v20', 'true');
+        window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
       }
     } catch (e) {
       console.warn('Auto dummy purge check warning:', e);

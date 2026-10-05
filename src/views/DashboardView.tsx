@@ -474,27 +474,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, curren
           </div>
 
           <div className="space-y-2.5">
-            {requests.slice(0, 4).map((req) => (
-              <div
-                key={req.id}
-                onClick={() => onNavigate('permintaan')}
-                className="p-3 rounded-xl border border-slate-100 hover:border-teal-300 hover:bg-teal-50/30 transition-all cursor-pointer flex items-center justify-between"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs text-slate-800">{req.nomorPermintaan}</span>
-                    <StatusBadge status={req.status} />
+            {(() => {
+              const displayRequests = currentUser?.role === 'PEGAWAI'
+                ? requests.filter(r => {
+                    const cId = String(currentUser.id || '').trim().toLowerCase();
+                    const cNip = String(currentUser.nip || '').trim();
+                    const cNama = String(currentUser.nama || '').trim().toLowerCase();
+                    const cUser = String(currentUser.username || '').trim().toLowerCase();
+
+                    const rId = String(r.pemohonId || '').trim().toLowerCase();
+                    const rNip = String(r.pemohonNip || '').trim();
+                    const rNama = String(r.pemohonNama || '').trim().toLowerCase();
+
+                    return (
+                      (cId && rId && rId === cId) ||
+                      (cNip && rNip && rNip === cNip) ||
+                      (cNama && rNama && (rNama === cNama || rNama.includes(cNama) || cNama.includes(rNama))) ||
+                      (cUser && (rNip === cUser || rId === cUser))
+                    );
+                  })
+                : requests;
+
+              if (displayRequests.length === 0) {
+                return (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    Belum ada riwayat permintaan barang.
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {req.pemohonNama} • <strong>{req.gudangTujuanNama}</strong>
+                );
+              }
+
+              return displayRequests.slice(0, 4).map((req) => (
+                <div
+                  key={req.id}
+                  onClick={() => onNavigate('permintaan')}
+                  className="p-3 rounded-xl border border-slate-100 hover:border-teal-300 hover:bg-teal-50/30 transition-all cursor-pointer flex items-center justify-between"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-slate-800">{req.nomorPermintaan}</span>
+                      <StatusBadge status={req.status} />
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {req.pemohonNama} • <strong>{req.gudangTujuanNama}</strong>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {req.items.length} jenis item diminta • {req.tanggalPermintaan}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {req.items.length} jenis item diminta • {req.tanggalPermintaan}
-                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-300" />
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
 

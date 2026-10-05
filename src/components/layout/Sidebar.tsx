@@ -3,7 +3,8 @@ import {
   Home, Package, FileText, CheckSquare, Truck, 
   Inbox, ArrowLeftRight, ClipboardCheck, CreditCard, 
   FileCheck2, FileOutput, BarChart3, Building2, 
-  Layers, Users, Settings, History, ShieldAlert, X, Lightbulb
+  Layers, Users, Settings, History, ShieldAlert, X, Lightbulb,
+  PanelLeftClose
 } from 'lucide-react';
 import { User } from '../../types';
 
@@ -14,6 +15,8 @@ interface SidebarProps {
   currentUser: User | null;
   isOpen?: boolean;
   onClose?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   pendingApprovalCount?: number;
   pendingApprovalsCount?: number;
   pendingDroppingCount?: number;
@@ -29,6 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   isOpen = false,
   onClose,
+  isCollapsed = false,
+  onToggleCollapse,
   pendingApprovalCount = 0,
   pendingApprovalsCount = 0,
   pendingDroppingCount = 0,
@@ -135,6 +140,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-slate-900 text-slate-300 select-none">
+      {/* Desktop Header with Hide/Collapse action */}
+      <div className="hidden md:flex items-center justify-between px-3.5 py-3 border-b border-slate-800 bg-slate-950/70">
+        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+          Menu Aplikasi
+        </span>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="flex items-center gap-1.5 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-md text-[10px] font-bold border border-slate-700 transition-colors cursor-pointer"
+            title="Sembunyikan menu di samping agar tampilan lebar"
+          >
+            <PanelLeftClose className="w-3.5 h-3.5 text-slate-400" />
+            <span>Sembunyikan</span>
+          </button>
+        )}
+      </div>
+
       {/* Mobile Header if in Drawer */}
       <div className="flex md:hidden items-center justify-between p-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -213,9 +235,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <>
       {/* Desktop Sticky Sidebar */}
-      <aside className="hidden md:flex w-64 h-[calc(100vh-4rem)] sticky top-16 select-none flex-shrink-0 border-r border-slate-800 z-20">
-        {sidebarContent}
-      </aside>
+      {!isCollapsed && (
+        <aside className="hidden md:flex w-64 h-[calc(100vh-4rem)] sticky top-16 select-none flex-shrink-0 border-r border-slate-800 z-20">
+          {sidebarContent}
+        </aside>
+      )}
 
       {/* Mobile Drawer Overlay */}
       {isOpen && (

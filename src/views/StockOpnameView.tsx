@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardCheck, Building2, Search, Download, 
-  Save, AlertTriangle, CheckCircle2, RefreshCw 
+  Save, AlertTriangle, CheckCircle2, RefreshCw, X, Filter, Database
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
-import { Warehouse, Item, WarehouseStock, User } from '../types';
+import { gasService } from '../services/gasService';
+import { Warehouse, Item, WarehouseStock, User, Category } from '../types';
 import { ExcelService } from '../services/excelService';
 
 interface StockOpnameViewProps {
@@ -16,11 +17,19 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [stocks, setStocks] = useState<WarehouseStock[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [varianceFilter, setVarianceFilter] = useState<'ALL' | 'SELISIH' | 'SESUAI'>('ALL');
 
   // Opname Input Map: { [barangId]: { fisik: number; notes: string } }
   const [opnameInputs, setOpnameInputs] = useState<{ [barangId: string]: { fisik: number; notes: string } }>({});
   const [petugasOpname, setPetugasOpname] = useState(currentUser?.nama || 'Petugas Gudang');
+  const [isSavingOpname, setIsSavingOpname] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'ADMIN';
   const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
@@ -32,9 +41,11 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
     const whs = storageService.getWarehouses();
     const itms = storageService.getItems();
     const stks = storageService.getStocks();
+    const cats = storageService.getCategories();
     setWarehouses(whs);
     setItems(itms);
     setStocks(stks);
+    setCategories(cats);
 
     if (!isSuperAdmin) {
       if (isPicBesar) {
@@ -86,55 +97,104 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
     }));
   };
 
-  const handleSaveOpname = () => {
+  const handleSaveOpname = async () => {
     if (!selectedWarehouseId) return;
 
+    setIsSavingOpname(true);
     let adjustedCount = 0;
     const opnameRef = `OPNAME/${new Date().getFullYear()}/${Date.now().toString().slice(-4)}`;
 
-    items.forEach(itm => {
-      const currentStock = storageService.getStockByWarehouseAndItem(selectedWarehouseId, itm.id).saldo;
-      const physical = opnameInputs[itm.id]?.fisik ?? currentStock;
-      const diff = physical - currentStock;
+    try {
+      items.forEach(itm => {
+        const currentStock = storageService.getStockByWarehouseAndItem(selectedWarehouseId, itm.id).saldo;
+        const physical = opnameInputs[itm.id]?.fisik ?? currentStock;
+        const diff = physical - currentStock;
 
-      if (diff !== 0) {
-        adjustedCount++;
-        const notes = opnameInputs[itm.id]?.notes || 'Rekonsiliasi hasil Stock Opname Fisik';
-        if (diff > 0) {
-          // Fisik lebih banyak -> Masuk
-          storageService.recordTransaction(
-            selectedWarehouseId,
-            itm.id,
-            'PENYESUAIAN_OPNAME',
-            diff,
-            0,
-            `Selisih Lebih (+${diff}) Opname Fisik: ${notes}`,
-            opnameRef
-          );
-        } else {
-          // Fisik lebih sedikit -> Keluar
-          storageService.recordTransaction(
-            selectedWarehouseId,
-            itm.id,
-            'PENYESUAIAN_OPNAME',
-            0,
-            Math.abs(diff),
-            `Selisih Kurang (${diff}) Opname Fisik: ${notes}`,
-            opnameRef
-          );
+        if (diff !== 0) {
+          adjustedCount++;
+          const notes = opnameInputs[itm.id]?.notes || 'Rekonsiliasi hasil Stock Opname Fisik';
+          if (diff > 0) {
+            storageService.recordTransaction(
+              selectedWarehouseId,
+              itm.id,
+              'PENYESUAIAN_OPNAME',
+              diff,
+              0,
+              `Selisih Lebih (+${diff}) Opname Fisik: ${notes}`,
+              opnameRef
+            );
+          } else {
+            storageService.recordTransaction(
+              selectedWarehouseId,
+              itm.id,
+              'PENYESUAIAN_OPNAME',
+              0,
+              Math.abs(diff),
+              `Selisih Kurang (${diff}) Opname Fisik: ${notes}`,
+              opnameRef
+            );
+          }
         }
+      });
+
+      loadData();
+      onRefreshStats();
+
+      // Unggah & sinkronkan hasil opname langsung ke Google Spreadsheet
+      let pushSuccess = false;
+      let pushNote = '';
+      try {
+        const pushRes = await gasService.pushToSheets();
+        if (pushRes.success) {
+          pushSuccess = true;
+          pushNote = 'dan tersimpan ke database Spreadsheet!';
+        } else {
+          pushNote = '(sinkronisasi otomatis ke Spreadsheet terjadwal)';
+        }
+      } catch (err: any) {
+        pushNote = '(tersimpan lokal, antrean sinkronisasi aktif)';
       }
-    });
 
-    loadData();
-    onRefreshStats();
+      const msg = adjustedCount > 0
+        ? `✅ Rekonsiliasi Stock Opname berhasil di-update ${pushNote} (${adjustedCount} item disesuaikan).`
+        : `✅ Hasil Stock Opname tersimpan ${pushNote}: Saldo fisik 100% cocok dengan saldo sistem.`;
 
-    if (adjustedCount > 0) {
-      alert(`Rekonsiliasi Stock Opname Berhasil!\nTelah dilakukan penyesuaian otomatis untuk ${adjustedCount} item yang memiliki selisih fisik.`);
-    } else {
-      alert('Stock Opname Tersimpan: Seluruh saldo fisik barang SESUAI 100% dengan saldo buku sistem.');
+      setToastMessage({ type: 'success', text: msg });
+      setTimeout(() => setToastMessage(null), 5000);
+
+    } catch (err: any) {
+      setToastMessage({ type: 'error', text: `Gagal menyimpan opname: ${err?.message || 'Kesalahan sistem'}` });
+      setTimeout(() => setToastMessage(null), 5000);
+    } finally {
+      setIsSavingOpname(false);
     }
   };
+
+  // Filter items based on search query, category, and variance
+  const filteredItems = items.filter(itm => {
+    if (categoryFilter !== 'ALL' && itm.kategoriId !== categoryFilter) {
+      return false;
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const match = 
+        itm.namaBarang.toLowerCase().includes(q) ||
+        itm.kodeBarang.toLowerCase().includes(q) ||
+        (itm.merk && itm.merk.toLowerCase().includes(q)) ||
+        (itm.spesifikasi && itm.spesifikasi.toLowerCase().includes(q)) ||
+        (itm.kategoriNama && itm.kategoriNama.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    if (varianceFilter !== 'ALL') {
+      const stock = stocks.find(s => s.gudangId === selectedWarehouseId && s.barangId === itm.id);
+      const saldoSistem = stock ? stock.saldo : 0;
+      const saldoFisik = opnameInputs[itm.id]?.fisik ?? saldoSistem;
+      const isSelisih = saldoFisik !== saldoSistem;
+      if (varianceFilter === 'SELISIH' && !isSelisih) return false;
+      if (varianceFilter === 'SESUAI' && isSelisih) return false;
+    }
+    return true;
+  });
 
   const handleExportExcel = () => {
     const rows = items.map((itm, idx) => {
@@ -183,6 +243,36 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
         </div>
       )}
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div 
+          className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-sm animate-in fade-in-50 duration-200 ${
+            toastMessage.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+              : toastMessage.type === 'info'
+              ? 'bg-blue-50 text-blue-800 border-blue-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : toastMessage.type === 'info' ? (
+              <RefreshCw className="w-4 h-4 text-blue-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-slate-600 ml-4 font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -190,23 +280,34 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
             Stock Opname Fisik & Rekonsiliasi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Pencocokan saldo pembukuan sistem dengan perhitungan fisik barang nyata di gudang.
+            Pencocokan saldo pembukuan sistem dengan perhitungan fisik barang nyata di gudang &amp; sinkronisasi ke Spreadsheet.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={handleExportExcel}
-            className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+            className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" /> Export Excel
           </button>
           {canOpname && (
             <button
               onClick={handleSaveOpname}
-              className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+              disabled={isSavingOpname}
+              className="px-4 py-2 bg-teal-800 hover:bg-teal-900 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
             >
-              <Save className="w-4 h-4" /> Simpan & Rekonsiliasi Saldo
+              {isSavingOpname ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Menyimpan ke Spreadsheet...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Simpan &amp; Rekonsiliasi Saldo</span>
+                </>
+              )}
             </button>
           )}
         </div>
@@ -260,6 +361,110 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
         </div>
       </div>
 
+      {/* Kolom Pencarian Barang & Filter Kategori Opname */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border-2 border-teal-600/30 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <label htmlFor="input-search-opname-barang" className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-2">
+            <Search className="w-4 h-4 text-teal-700" />
+            <span>Kolom Pencarian Barang Stok Opname Fisik</span>
+          </label>
+          <span className="text-[11px] text-slate-500 hidden sm:inline">
+            Cari cepat nama barang, kode barang, merk, atau spesifikasi
+          </span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+          {/* Input Pencarian Utama */}
+          <div className="relative flex-1 w-full">
+            <Search className="w-4 h-4 text-teal-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              id="input-search-opname-barang"
+              type="text"
+              placeholder="Ketik nama barang atau kode barang untuk opname fisik (contoh: Amoxicillin, Spuit, Kertas...)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-slate-100/70 border border-slate-300 focus:border-teal-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:bg-white text-slate-800 transition-all font-medium"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold px-1.5 py-0.5 rounded hover:bg-slate-200 transition-colors"
+                title="Hapus kata kunci pencarian"
+              >
+                ✕ Hapus
+              </button>
+            )}
+          </div>
+
+          {/* Filter Kategori Barang */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-600 w-full sm:w-48 text-slate-700"
+            >
+              <option value="ALL">Semua Kategori</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.nama}</option>
+              ))}
+            </select>
+
+            {/* Filter Status Selisih */}
+            <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+              <button
+                type="button"
+                onClick={() => setVarianceFilter('ALL')}
+                className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
+                  varianceFilter === 'ALL' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                onClick={() => setVarianceFilter('SELISIH')}
+                className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
+                  varianceFilter === 'SELISIH' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Selisih ({totalSelisihItem})
+              </button>
+              <button
+                type="button"
+                onClick={() => setVarianceFilter('SESUAI')}
+                className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
+                  varianceFilter === 'SESUAI' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Sesuai
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Counter Info */}
+        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+          <div>
+            Menampilkan <strong className="text-teal-800 font-bold">{filteredItems.length}</strong> dari <strong className="text-slate-800 font-semibold">{items.length}</strong> item barang opname
+            {searchQuery && (
+              <span className="ml-2 text-teal-700 font-medium">
+                (Hasil filter: "{searchQuery}")
+              </span>
+            )}
+          </div>
+          {(searchQuery || categoryFilter !== 'ALL' || varianceFilter !== 'ALL') && (
+            <button
+              type="button"
+              onClick={() => { setSearchQuery(''); setCategoryFilter('ALL'); setVarianceFilter('ALL'); }}
+              className="text-teal-700 hover:underline font-semibold cursor-pointer"
+            >
+              Reset Filter Pencarian
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Opname Calculation Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -267,22 +472,82 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
             <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3 w-12 text-center">No</th>
-                <th className="px-4 py-3">Kode & Nama Barang</th>
+                <th className="px-4 py-3">Kode &amp; Nama Barang</th>
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3 text-center">Saldo Sistem</th>
                 <th className="px-4 py-3 text-center w-36">Hitungan Fisik Nyata</th>
                 <th className="px-4 py-3 text-center">Selisih</th>
                 <th className="px-4 py-3">Catatan / Keterangan</th>
               </tr>
+              {/* Kolom Pencarian Langsung di Header Tabel */}
+              <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-normal">
+                <th className="p-1.5 text-center text-slate-400 font-normal">#</th>
+                <th className="p-1.5">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Cari di kolom barang..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-7 pr-6 py-1 bg-white border border-slate-300 rounded-lg text-xs font-normal text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-600 placeholder:text-slate-400"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </th>
+                <th className="p-1.5">
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-normal text-slate-700 focus:outline-none"
+                  >
+                    <option value="ALL">Semua</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.nama}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="p-1.5 text-center text-[10px] text-slate-500 font-normal">Sistem</th>
+                <th className="p-1.5 text-center text-[10px] text-teal-800 font-semibold">Input Fisik</th>
+                <th className="p-1.5 text-center">
+                  <select
+                    value={varianceFilter}
+                    onChange={(e) => setVarianceFilter(e.target.value as any)}
+                    className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded-lg text-[11px] font-normal text-slate-700 focus:outline-none"
+                  >
+                    <option value="ALL">Semua</option>
+                    <option value="SELISIH">Selisih</option>
+                    <option value="SESUAI">Sesuai</option>
+                  </select>
+                </th>
+                <th className="p-1.5 text-[10px] text-slate-400 font-normal">Keterangan</th>
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {items.map((itm, idx) => {
-                const stock = stocks.find(s => s.gudangId === selectedWarehouseId && s.barangId === itm.id);
-                const saldoSistem = stock ? stock.saldo : 0;
-                const saldoFisik = opnameInputs[itm.id]?.fisik ?? saldoSistem;
-                const selisih = saldoFisik - saldoSistem;
+              {filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-slate-400">
+                    <Search className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                    <p className="font-bold text-slate-600">Tidak ada barang yang cocok dengan pencarian.</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Coba gunakan kata kunci lain atau reset filter kategori.</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredItems.map((itm, idx) => {
+                  const stock = stocks.find(s => s.gudangId === selectedWarehouseId && s.barangId === itm.id);
+                  const saldoSistem = stock ? stock.saldo : 0;
+                  const saldoFisik = opnameInputs[itm.id]?.fisik ?? saldoSistem;
+                  const selisih = saldoFisik - saldoSistem;
 
-                return (
+                  return (
                   <tr key={itm.id} className={`hover:bg-slate-50/80 transition-colors ${selisih !== 0 ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="px-4 py-3">
@@ -324,7 +589,7 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

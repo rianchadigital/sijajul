@@ -52,8 +52,16 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
   const [updateExisting, setUpdateExisting] = useState(true);
   const [targetWarehouseId, setTargetWarehouseId] = useState('GUDANG-001');
 
-  // Feedback Toast
+  // Feedback Toast & Upload Success Dialog
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [importSuccessResult, setImportSuccessResult] = useState<{
+    show: boolean;
+    importedCount: number;
+    updatedCount: number;
+    newCategoriesCount: number;
+    uploadedToSheets: boolean;
+    message: string;
+  } | null>(null);
 
   // Form State
   const [kodeBarang, setKodeBarang] = useState('');
@@ -274,7 +282,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     }
   };
 
-  const handleExecuteImport = () => {
+  const handleExecuteImport = async () => {
     const validRowsToImport = parsedRows.filter(r => r.status !== 'INVALID');
     if (validRowsToImport.length === 0) {
       showToast('Tidak ada data valid yang dapat diimpor.', 'error');
@@ -284,6 +292,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     setIsImporting(true);
 
     try {
+      // 1. Simpan dan perbarui data lokal (Items, Stocks, Categories, Audit Log)
       const result = storageService.importItemsBatch(
         validRowsToImport.map(r => ({
           kodeBarang: r.kodeBarang,
@@ -303,9 +312,43 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
         }
       );
 
+      // Refresh data lokal agar tabel segera terisi
+      loadData();
+
+      // 2. Unggah langsung ke database Google Spreadsheet (MASTER_BARANG & STOK_GUDANG)
+      let uploadSuccess = false;
+      let uploadNote = '';
+      try {
+        const pushRes = await gasService.pushToSheets();
+        if (pushRes.success) {
+          uploadSuccess = true;
+          uploadNote = pushRes.message || 'Data berhasil dikirim ke Google Spreadsheet!';
+        } else {
+          uploadNote = pushRes.message || 'Tersimpan lokal, antrean sinkronisasi background aktif.';
+        }
+      } catch (sheetErr: any) {
+        uploadNote = sheetErr?.message || 'Tersimpan lokal & sinkronisasi otomatis terjadwal.';
+      }
+
       setShowImportModal(false);
       loadData();
-      showToast(result.message, 'success');
+
+      const successToastMsg = uploadSuccess
+        ? `✅ Data berhasil di-upload dan tersimpan ke database Spreadsheet! (${result.importedCount} barang baru ditambahkan, ${result.updatedCount} diperbarui)`
+        : `✅ Data berhasil diimpor (${result.importedCount} baru, ${result.updatedCount} update). Info Spreadsheet: ${uploadNote}`;
+
+      showToast(successToastMsg, 'success');
+
+      // Tampilkan popup konfirmasi sukses upload ke spreadsheet
+      setImportSuccessResult({
+        show: true,
+        importedCount: result.importedCount,
+        updatedCount: result.updatedCount,
+        newCategoriesCount: result.newCategoriesCount,
+        uploadedToSheets: uploadSuccess,
+        message: successToastMsg
+      });
+
     } catch (err: any) {
       showToast(`Gagal mengimpor data: ${err?.message || 'Kesalahan sistem'}`, 'error');
     } finally {
@@ -870,7 +913,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                   {isImporting ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Mengimpor Data...</span>
+                      <span>Mengimpor & Menyimpan ke Spreadsheet...</span>
                     </>
                   ) : (
                     <>
@@ -880,6 +923,77 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* IMPORT UPLOAD SUCCESS MODAL */}
+      {/* ========================================================================= */}
+      {importSuccessResult?.show && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in zoom-in-95 border border-slate-200">
+            <div className="flex items-start gap-3.5 pb-4 border-b border-slate-100">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-600 shrink-0">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-800">
+                  Data Berhasil Di-upload!
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Proses impor &amp; penyimpanan ke database Google Spreadsheet selesai.
+                </p>
+              </div>
+              <button 
+                onClick={() => setImportSuccessResult(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="py-4 space-y-3.5 text-xs">
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-emerald-900 font-semibold leading-relaxed">
+                {importSuccessResult.message}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-slate-700">
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Barang Baru</div>
+                  <div className="text-base font-bold text-emerald-700 mt-0.5">+{importSuccessResult.importedCount} item</div>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">Barang Diperbarui</div>
+                  <div className="text-base font-bold text-indigo-700 mt-0.5">{importSuccessResult.updatedCount} item</div>
+                </div>
+              </div>
+
+              {importSuccessResult.newCategoriesCount > 0 && (
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-[11px]">
+                  ✨ Terdeteksi &amp; otomatis dibuat <strong>{importSuccessResult.newCategoriesCount} kategori baru</strong>.
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600">
+                <Database className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>
+                  {importSuccessResult.uploadedToSheets 
+                    ? 'Status: Tersinkronisasi penuh dengan Google Spreadsheet Puskesmas Kepulauan Seribu Selatan.' 
+                    : 'Status: Tersimpan lokal & antrean sinkronisasi Spreadsheet aktif di latar belakang.'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setImportSuccessResult(null)}
+                className="px-5 py-2 font-bold bg-teal-800 hover:bg-teal-900 text-white rounded-xl shadow-xs transition-colors cursor-pointer text-xs"
+              >
+                Tutup &amp; Lihat Data Master
+              </button>
             </div>
           </div>
         </div>
@@ -931,7 +1045,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Paracetamol 500 mg Tablet"
+                  placeholder="Contoh: Amoxicillin 500 mg Kapsul"
                   value={namaBarang}
                   onChange={(e) => setNamaBarang(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800"

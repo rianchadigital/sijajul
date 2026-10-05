@@ -23,7 +23,7 @@ export const WhatsappBotModal: React.FC<WhatsappBotModalProps> = ({ isOpen, onCl
         {
           id: 'welcome-0',
           sender: 'BOT',
-          text: `👋 Halo! Saya *${waConfig.botName || 'SiGudang Bot'}*, robot asisten otomatis untuk cek jumlah stok barang di Puskesmas Kepulauan Seribu Selatan.\n\nKetik nama obat/barang (misal: *paracetamol*, *kertas hvs*, *masker*) atau tanyakan *stok kritis* untuk melihat barang yang menipis.`,
+          text: `👋 Halo! Saya *${waConfig.botName || 'SiGudang Bot'}*, asisten otomatis untuk cek jumlah stok barang di Puskesmas Kepulauan Seribu Selatan.\n\nKetik nama obat/barang atau tanyakan *stok kritis* untuk melihat barang yang menipis.`,
           timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -122,12 +122,6 @@ export const WhatsappBotModal: React.FC<WhatsappBotModalProps> = ({ isOpen, onCl
           <span className="text-slate-400 flex-shrink-0 font-semibold flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-400" /> Cepat:
           </span>
-          <button
-            onClick={() => handleSend('cek paracetamol')}
-            className="px-2.5 py-0.5 bg-slate-800 hover:bg-emerald-900 hover:text-emerald-300 text-slate-200 rounded-full whitespace-nowrap border border-slate-700 transition-colors"
-          >
-            💊 Paracetamol
-          </button>
           <button
             onClick={() => handleSend('stok kritis')}
             className="px-2.5 py-0.5 bg-slate-800 hover:bg-amber-900 hover:text-amber-300 text-slate-200 rounded-full whitespace-nowrap border border-slate-700 transition-colors"

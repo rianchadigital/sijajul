@@ -1,26 +1,41 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { storageService } from '../../services/storageService';
+import { 
+  DEFAULT_LOGO_JAYA_RAYA, 
+  DEFAULT_LOGO_KESEHATAN, 
+  DEFAULT_DRIVE_ASSET_ID, 
+  getGoogleDriveThumbnailUrl 
+} from '../../data/defaultLogos';
 
 export const KopSurat: React.FC = () => {
   const logoConfig = storageService.getLogoConfig();
+  const [jayaRayaError, setJayaRayaError] = useState(false);
+  const [kesehatanError, setKesehatanError] = useState(false);
+
+  // Default Drive URL for the official logos (ID: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5)
+  const defaultDriveLogo = getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400);
+
+  const jayaRayaSrc = jayaRayaError 
+    ? DEFAULT_LOGO_JAYA_RAYA 
+    : (logoConfig.logoJayaRaya || defaultDriveLogo || DEFAULT_LOGO_JAYA_RAYA);
+
+  const kesehatanSrc = kesehatanError 
+    ? DEFAULT_LOGO_KESEHATAN 
+    : (logoConfig.logoKesehatan || defaultDriveLogo || DEFAULT_LOGO_KESEHATAN);
 
   return (
     <div id="kop-surat-puskesmas" className="border-b-2 border-teal-800 pb-3 mb-6">
       <div className="flex items-center justify-between gap-4">
-        {/* DKI Jakarta Logo (Custom / Default) */}
+        {/* DKI Jakarta Logo (Custom / Drive Asset / Default) */}
         <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
-          {logoConfig.logoJayaRaya ? (
-            <img 
-              src={logoConfig.logoJayaRaya} 
-              alt="Logo Jaya Raya" 
-              className="w-16 h-16 object-contain"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="w-16 h-16 flex items-center justify-center bg-teal-800 text-white rounded-lg font-bold text-center text-xs p-1 shadow-xs">
-              <span>JAYA RAYA</span>
-            </div>
-          )}
+          <img 
+            src={jayaRayaSrc} 
+            alt="Logo Jaya Raya" 
+            className="w-16 h-16 object-contain"
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            onError={() => setJayaRayaError(true)}
+          />
         </div>
 
         {/* Header Text */}
@@ -42,20 +57,16 @@ export const KopSurat: React.FC = () => {
           </p>
         </div>
 
-        {/* Puskesmas / Bakti Husada Logo (Custom / Default) */}
+        {/* Puskesmas / Bakti Husada Logo (Custom / Drive Asset / Default) */}
         <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center">
-          {logoConfig.logoKesehatan ? (
-            <img 
-              src={logoConfig.logoKesehatan} 
-              alt="Logo Kesehatan" 
-              className="w-16 h-16 object-contain"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="w-16 h-16 flex items-center justify-center bg-teal-50 border border-teal-200 text-teal-800 rounded-lg font-bold text-center text-xs p-1">
-              <span>BAKTI HUSADA</span>
-            </div>
-          )}
+          <img 
+            src={kesehatanSrc} 
+            alt="Logo Kesehatan" 
+            className="w-16 h-16 object-contain"
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            onError={() => setKesehatanError(true)}
+          />
         </div>
       </div>
       <div className="h-[2px] bg-teal-800 mt-2"></div>
@@ -63,3 +74,4 @@ export const KopSurat: React.FC = () => {
     </div>
   );
 };
+

@@ -50,3 +50,20 @@ export const DEFAULT_LOGO_KESEHATAN = `data:image/svg+xml;utf8,<svg xmlns="http:
   <!-- Label Text -->
   <text x="50" y="87" font-family="Arial, Helvetica, sans-serif" font-size="6.5" font-weight="bold" text-anchor="middle" fill="%23ffffff" letter-spacing="0.5">BAKTI HUSADA</text>
 </svg>`;
+
+/**
+ * Asset Resmi Kop Surat dari Google Drive yang diberikan oleh Pengguna:
+ * ID: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5 (logo kesehatan dan logo jaya raya)
+ */
+export const DEFAULT_DRIVE_ASSET_ID = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
+
+export const getGoogleDriveImageUrl = (fileId: string = DEFAULT_DRIVE_ASSET_ID): string => {
+  if (!fileId) return '';
+  return `https://lh3.googleusercontent.com/d/${fileId}`;
+};
+
+export const getGoogleDriveThumbnailUrl = (fileId: string = DEFAULT_DRIVE_ASSET_ID, size: number = 800): string => {
+  if (!fileId) return '';
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`;
+};
+

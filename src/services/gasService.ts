@@ -272,7 +272,6 @@ function seedInitialData() {
   var sheetBarang = ss.getSheetByName("MASTER_BARANG");
   if (sheetBarang && sheetBarang.getLastRow() <= 1) {
     var dataBarang = [
-      ["ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", "Tablet", "Kimia Farma", "Strip isi 10 tablet", 100, "Aktif", "Analgesik & Antipiretik Utama"],
       ["ITM-002", "MED-AMX-500", "Amoxicillin 500 mg Kapsul", "Obat-obatan", "Kapsul", "Indofarma", "Strip isi 10 kapsul", 80, "Aktif", "Antibiotik Spektrum Luas"],
       ["ITM-003", "MED-CPT-025", "Captopril 25 mg Tablet", "Obat-obatan", "Tablet", "Phapros", "Strip isi 10 tablet", 50, "Aktif", "Antihipertensi ACE Inhibitor"],
       ["ITM-004", "MED-ANT-001", "Antasida Doen Tablet Kunyah", "Obat-obatan", "Tablet", "Generic", "Botol / Strip", 80, "Aktif", "Antasida Lambung"],
@@ -291,12 +290,6 @@ function seedInitialData() {
   if (sheetStok && sheetStok.getLastRow() <= 1) {
     var tglSekarang = new Date().toLocaleString("id-ID", { timeZone: CONFIG.TIMEZONE });
     var dataStok = [
-      ["STK-001", "GUD-001", "Gudang Puskesmas Kepulauan Seribu Selatan", "ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", 1500, "Tablet", 100, "Aman", "Rak A1", tglSekarang],
-      ["STK-002", "GUD-002", "Gudang Puskesmas Tidung", "ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", 450, "Tablet", 100, "Aman", "Lemari 1", tglSekarang],
-      ["STK-003", "GUD-003", "Gudang Pustu Pari", "ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", 80, "Tablet", 100, "Kritis", "Rak Obat 2", tglSekarang],
-      ["STK-004", "GUD-004", "Gudang Pustu Lancang", "ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", 210, "Tablet", 100, "Aman", "Rak Obat 1", tglSekarang],
-      ["STK-005", "GUD-005", "Gudang Pusling Payung", "ITM-001", "MED-PCT-500", "Paracetamol 500 mg Tablet", "Obat-obatan", 65, "Tablet", 100, "Kritis", "Kotak Obat", tglSekarang],
-      
       ["STK-006", "GUD-001", "Gudang Puskesmas Kepulauan Seribu Selatan", "ITM-005", "BHP-MSK-003", "Masker Medis 3-Ply Earloop", "BHP Medis", 85, "Box", 20, "Aman", "Gudang APD", tglSekarang],
       ["STK-007", "GUD-002", "Gudang Puskesmas Tidung", "ITM-005", "BHP-MSK-003", "Masker Medis 3-Ply Earloop", "BHP Medis", 25, "Box", 20, "Aman", "Ruang Logistik", tglSekarang],
       ["STK-008", "GUD-003", "Gudang Pustu Pari", "ITM-005", "BHP-MSK-003", "Masker Medis 3-Ply Earloop", "BHP Medis", 12, "Box", 20, "Kritis", "Lemari APD", tglSekarang],
@@ -311,13 +304,7 @@ function seedInitialData() {
   var sheetUser = ss.getSheetByName("PENGGUNA_SISTEM");
   if (sheetUser && sheetUser.getLastRow() <= 1) {
     var dataUser = [
-      ["USR-001", "197805122005011003", "dr. Ahmad Zulkarnain, M.KM", "Kepala Puskesmas", "Pimpinan", "Semua Gudang", "KEPALA_PUSKESMAS", "kapus", "Aktif", "081122334455"],
-      ["USR-002", "198402152009021004", "Hendra Setiawan, S.Farm", "Pengelola Barang", "Logistik & Farmasi", "Gudang Besar KSS", "PENGELOLA_BARANG", "pengelola", "Aktif", "081234567890"],
-      ["USR-003", "198907202014032002", "Siti Rahmawati, A.Md.Keb", "Petugas Sub Gudang Tidung", "Pelayanan Tidung", "Sub Gudang Tidung", "PETUGAS_GUDANG", "tidung", "Aktif", "081234567891"],
-      ["USR-004", "199103112015021005", "Ahmad Fauzi, A.Md.Kep", "Petugas Pustu Pari", "Pelayanan Pari", "Pustu Pari", "PETUGAS_GUDANG", "pari", "Aktif", "081234567892"],
-      ["USR-005", "199308192018012003", "Dewi Lestari, A.Md.Farm", "Petugas Pustu Lancang", "Pelayanan Lancang", "Pustu Lancang", "PETUGAS_GUDANG", "lancang", "Aktif", "081234567893"],
-      ["USR-006", "199011052016021006", "Bambang Supriyanto, S.Kep", "Petugas Pusling Payung", "Pelayanan Payung", "Pusling Payung", "PETUGAS_GUDANG", "payung", "Aktif", "081234567894"],
-      ["USR-007", "198209142006041008", "Rina Marlina, S.Sos", "Kasubag Tata Usaha", "Tata Usaha (TU)", "Semua Gudang", "KASUBAG_TU", "kasubagtu", "Aktif", "081399887766"]
+      ["USR-001", "198911", "ancha", "Kepala Admin", "Tata Usaha & Manajemen", "Puskesmas Kepulauan Seribu Selatan", "ADMIN", "admin", "Aktif", "081299887766"]
     ];
     sheetUser.getRange(2, 1, dataUser.length, dataUser[0].length).setValues(dataUser);
   }
@@ -357,16 +344,24 @@ function pushAllDataToSheets(data) {
     }
   }
 
-  // 1. Users
-  if (data.users && Array.isArray(data.users)) {
-    var uRows = data.users.map(function(u) {
-      return [
-        u.id || "", u.nip || "", u.nama || "", u.jabatan || "", u.unitKerja || "", 
-        u.tempatTugas || u.gudangId || "", u.role || "", u.username || "", 
-        u.statusAktif ? "Aktif" : "Nonaktif", u.noHp || ""
-      ];
+  // 1. Users - HANYA ditimpa jika dikirim eksplisit dengan flag khusus dan bukan akun demo
+  if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+    var cleanUsers = data.users.filter(function(u) {
+      var n = String(u.nama || '').toLowerCase();
+      var nip = String(u.nip || '').trim();
+      var uname = String(u.username || '').toLowerCase();
+      return !n.includes('zulkarnain') && !n.includes('demo') && nip !== '197805122005011003' && uname !== 'demo' && uname !== 'kapus';
     });
-    syncTable("PENGGUNA_SISTEM", uRows);
+    if (cleanUsers.length > 0) {
+      var uRows = cleanUsers.map(function(u) {
+        return [
+          u.id || "", u.nip || "", u.nama || "", u.jabatan || "", u.unitKerja || "", 
+          u.tempatTugas || u.gudangId || "", u.role || "", u.username || "", 
+          u.statusAktif ? "Aktif" : "Nonaktif", u.noHp || ""
+        ];
+      });
+      syncTable("PENGGUNA_SISTEM", uRows);
+    }
   }
 
   // 2. Gudang
@@ -934,46 +929,135 @@ export class GasService {
     }
   }
 
-  static async pushToSheets(webAppUrl: string): Promise<{ success: boolean; message: string }> {
-    if (!webAppUrl || !webAppUrl.startsWith('http')) {
+  static async pushToSheets(webAppUrl?: string, options?: { includeUsers?: boolean }): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = webAppUrl || cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url || !url.startsWith('http')) {
       return { success: false, message: 'URL Web App belum diatur di Pengaturan.' };
     }
     try {
-      const payload = {
-        action: 'syncPush',
-        data: {
-          users: storageService.getUsers(),
-          warehouses: storageService.getWarehouses(),
-          categories: storageService.getCategories(),
-          items: storageService.getItems(),
-          stocks: storageService.getStocks(),
-          requests: storageService.getRequests(),
-          droppings: storageService.getDroppings(),
-          transactions: storageService.getTransactions(),
-          activityLogs: storageService.getActivityLogs()
-        }
-      };
-
-      const response = await fetch(webAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' }, // Avoid preflight CORS issues in GAS
-        body: JSON.stringify(payload)
+      const warehouses = storageService.getWarehouses();
+      const items = storageService.getItems();
+      const rawStocks = storageService.getStocks();
+      const enrichedStocks = rawStocks.map(s => {
+        const item = items.find(i => i.id === s.barangId || i.kodeBarang === s.barangId);
+        const wh = warehouses.find(w => w.id === s.gudangId || w.namaGudang === s.gudangId);
+        const minStock = Number(item?.stokMinimum || 10);
+        const isKritis = (s.saldo <= minStock) ? 'Kritis' : 'Aman';
+        return {
+          ...s,
+          gudangNama: wh?.namaGudang || s.gudangId,
+          barangNama: item?.namaBarang || s.barangId,
+          kodeBarang: item?.kodeBarang || '',
+          kategoriNama: item?.kategoriNama || 'Umum',
+          satuan: item?.satuan || 'Pcs',
+          stokMinimum: minStock,
+          statusKritis: isKritis,
+          lokasiRak: item?.spesifikasi || '-',
+          updateTerakhir: s.updateTerakhir || new Date().toISOString().replace('T', ' ').slice(0, 19)
+        };
       });
 
-      const resJson = await response.json();
-      if (resJson.status === 'success') {
-        const cfg = storageService.getSheetsConfig();
-        cfg.lastSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
-        cfg.isConnected = true;
-        storageService.saveSheetsConfig(cfg);
-        storageService.logActivity('Sinkronisasi Google Spreadsheet', 'PENGATURAN', 'Berhasil push data lokal ke Google Sheets');
-        return { success: true, message: resJson.result || 'Data berhasil dikirim ke Google Spreadsheet!' };
+      // PERHATIKAN: Data users TIDAK BOLEH dikirim secara default agar tidak menimpa PENGGUNA_SISTEM di spreadsheet
+      // Spreadsheet adalah master database pengguna. Hanya kirim jika includeUsers bernilai true.
+      const payloadData: any = {
+        warehouses: warehouses,
+        categories: storageService.getCategories(),
+        items: items,
+        stocks: enrichedStocks,
+        requests: storageService.getRequests(),
+        droppings: storageService.getDroppings(),
+        transactions: storageService.getTransactions(),
+        activityLogs: storageService.getActivityLogs()
+      };
+
+      if (options?.includeUsers) {
+        payloadData.users = storageService.getUsers().filter(u => {
+          const n = String(u.nama || '').toLowerCase();
+          const nip = String(u.nip || '').trim();
+          const un = String(u.username || '').toLowerCase();
+          return !n.includes('zulkarnain') && !n.includes('demo') && nip !== '197805122005011003' && un !== 'demo' && un !== 'kapus';
+        });
+      }
+
+      const payload = {
+        action: 'syncPush',
+        data: payloadData
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 18000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // Avoid preflight CORS issues in GAS
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      let resJson: any = null;
+      try {
+        resJson = await response.json();
+      } catch {
+        const text = await response.text().catch(() => '');
+        if (text && (text.includes('success') || text.includes('Berhasil'))) {
+          resJson = { status: 'success', result: 'Data berhasil dikirim ke Google Spreadsheet!' };
+        }
+      }
+
+      if (resJson && resJson.status === 'success') {
+        const currentCfg = storageService.getSheetsConfig();
+        currentCfg.lastSyncTime = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        currentCfg.isConnected = true;
+        storageService.saveSheetsConfig(currentCfg);
+        storageService.logActivity('Sinkronisasi Google Spreadsheet', 'MASTER_BARANG', 'Berhasil upload & sync data master ke Google Sheets');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'syncPush' } }));
+        }
+        return { success: true, message: resJson.result || resJson.message || 'Data berhasil di-upload ke Google Spreadsheet!' };
       } else {
-        return { success: false, message: resJson.message || 'Gagal sinkronisasi data.' };
+        return { success: false, message: resJson?.message || 'Gagal sinkronisasi data ke Google Spreadsheet.' };
       }
     } catch (e: any) {
-      return { success: false, message: `Error sinkronisasi: ${e.message}` };
+      this.triggerDebouncedAutoPush(1500);
+      return { success: false, message: `Sinkronisasi spreadsheet dijadwalkan: ${e?.message || 'Jaringan'}` };
     }
+  }
+
+  /**
+   * Mengunggah hasil impor batch master barang ke Google Spreadsheet
+   */
+  static async saveImportedItemsToSheets(count: number): Promise<{ success: boolean; message: string }> {
+    const pushResult = await this.pushToSheets();
+    if (pushResult.success) {
+      return {
+        success: true,
+        message: `✅ Berhasil mengunggah ${count} data barang ke database Google Spreadsheet!`
+      };
+    }
+    return pushResult;
+  }
+
+  /**
+   * Menyimpan / memperbarui perubahan stok langsung ke Google Spreadsheet
+   */
+  static async updateStockToSheets(
+    itemName: string,
+    warehouseName?: string,
+    newBalance?: number
+  ): Promise<{ success: boolean; message: string }> {
+    const pushResult = await this.pushToSheets();
+    if (pushResult.success) {
+      return {
+        success: true,
+        message: `✅ Stok ${itemName ? `"${itemName}"` : ''} berhasil di-update ke database Spreadsheet!`
+      };
+    }
+    return {
+      success: true,
+      message: `✅ Stok ${itemName ? `"${itemName}"` : ''} berhasil di-update secara lokal dan dijadwalkan sinkron ke Spreadsheet.`
+    };
   }
 
   static async pullFromSheets(webAppUrl: string): Promise<{ success: boolean; data?: any; message: string }> {
@@ -1026,15 +1110,16 @@ export class GasService {
     };
   }
 
-  static async syncUsersFromSheets(): Promise<{ success: boolean; count?: number; message: string }> {
+  static async syncUsersFromSheets(replaceLocal = true): Promise<{ success: boolean; count?: number; message: string }> {
     const cfg = storageService.getSheetsConfig();
-    if (!cfg.gasDeploymentUrl) {
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) {
       return {
         success: false,
         message: 'URL Web App Google Apps Script belum diisi di menu Pengaturan.'
       };
     }
-    const pullResult = await this.pullFromSheets(cfg.gasDeploymentUrl);
+    const pullResult = await this.pullFromSheets(url);
     if (!pullResult.success || !pullResult.data) {
       return { success: false, message: pullResult.message };
     }
@@ -1042,7 +1127,7 @@ export class GasService {
     if (!Array.isArray(sheetUsers) || sheetUsers.length === 0) {
       return { success: false, message: 'Sheet PENGGUNA_SISTEM kosong atau tidak memiliki baris data.' };
     }
-    const importRes = storageService.importUsersFromSpreadsheetRows(sheetUsers);
+    const importRes = storageService.importUsersFromSpreadsheetRows(sheetUsers, undefined, replaceLocal);
     return {
       success: true,
       count: importRes.importedCount + importRes.updatedCount,

@@ -11,6 +11,7 @@ import { gasService, generateGoogleAppsScriptCode } from '../services/gasService
 import { WhatsappBotService } from '../services/whatsappBotService';
 import { User, GasConfig, WhatsappConfig, AppLogoConfig, BotChatMessage } from '../types';
 import { KopSurat } from '../components/common/KopSurat';
+import { DEFAULT_DRIVE_ASSET_ID, getGoogleDriveThumbnailUrl } from '../data/defaultLogos';
 
 interface SettingsViewProps {
   currentUser: User | null;
@@ -19,6 +20,11 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _currentUser, onRefreshAll }) => {
   const [activeTab, setActiveTab] = useState<'WHATSAPP_BOT' | 'LOGO_CONFIG' | 'GAS_CONFIG' | 'SCRIPT_CODE' | 'HOSTINGER_DEPLOY' | 'BACKUP'>('WHATSAPP_BOT');
+  
+  // Feedback Banner / Toast State
+  const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isClearingDemo, setIsClearingDemo] = useState(false);
+  const [driveAssetInput, setDriveAssetInput] = useState(DEFAULT_DRIVE_ASSET_ID);
   
   // GAS Config State
   const [gasConfig, setGasConfig] = useState<GasConfig>({
@@ -63,7 +69,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     {
       id: 'msg-0',
       sender: 'BOT',
-      text: `👋 Halo! Saya *${storageService.getWhatsappConfig().botName || 'SI JAJUL Bot'}*, robot asisten otomatis untuk jaga stok dan informasi logistik Puskesmas Kepulauan Seribu Selatan.\n\nKetik nama barang (contoh: *paracetamol*, *kertas hvs*, *masker*) atau klik salah satu tombol cepat di bawah untuk mencoba!`,
+      text: `👋 Halo! Saya *${storageService.getWhatsappConfig().botName || 'SI JAJUL Bot'}*, asisten otomatis untuk jaga stok dan informasi logistik Puskesmas Kepulauan Seribu Selatan.\n\nKetik nama barang atau klik salah satu tombol cepat di bawah untuk mengecek stok data riil!`,
       timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -97,7 +103,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   const handleSaveGasConfig = (e: React.FormEvent) => {
     e.preventDefault();
     gasService.saveConfig(gasConfig);
-    alert('Pengaturan integrasi Google Apps Script & Spreadsheet berhasil disimpan!');
+    setActionFeedback({
+      message: 'Pengaturan integrasi Google Apps Script & Spreadsheet berhasil disimpan!',
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   const handleTestGasConnection = async () => {
@@ -108,11 +118,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       setTestResult(res);
       if (res.success) {
         setGasConfig(prev => ({ ...prev, status: 'CONNECTED' }));
+        setActionFeedback({
+          message: 'Koneksi ke endpoint Google Apps Script berhasil dan aktif!',
+          type: 'success'
+        });
+      } else {
+        setActionFeedback({
+          message: `Koneksi gagal: ${res.message}`,
+          type: 'error'
+        });
       }
     } catch (err: any) {
       setTestResult({ success: false, message: err.message || 'Gagal tersambung ke endpoint GAS' });
+      setActionFeedback({
+        message: err.message || 'Gagal tersambung ke endpoint GAS',
+        type: 'error'
+      });
     } finally {
       setTesting(false);
+      setTimeout(() => setActionFeedback(null), 5000);
     }
   };
 
@@ -123,27 +147,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       if (res.success) {
         setGasConfig(gasService.getConfig());
         onRefreshAll();
-        alert('Sinkronisasi penuh dengan Google Spreadsheet BERHASIL!');
+        setActionFeedback({
+          message: 'Sinkronisasi penuh dengan Google Spreadsheet BERHASIL!',
+          type: 'success'
+        });
       } else {
-        alert(`Sinkronisasi gagal: ${res.message}`);
+        setActionFeedback({
+          message: `Sinkronisasi gagal: ${res.message}`,
+          type: 'error'
+        });
       }
     } catch (err: any) {
-      alert(err.message || 'Terjadi kesalahan sinkronisasi');
+      setActionFeedback({
+        message: err.message || 'Terjadi kesalahan sinkronisasi',
+        type: 'error'
+      });
     } finally {
       setTesting(false);
+      setTimeout(() => setActionFeedback(null), 4000);
     }
   };
 
   const handlePullRealDataFromSheets = async () => {
     if (!gasConfig.webAppUrl) {
-      alert('Masukkan URL Web App Google Apps Script terlebih dahulu.');
+      setActionFeedback({
+        message: 'Masukkan URL Web App Google Apps Script terlebih dahulu.',
+        type: 'error'
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
       return;
     }
-    const confirmPull = confirm(
-      'Tarik data real dari Google Spreadsheet?\n\n' +
-      'Data master barang, saldo stok 5 gudang pulau, dan akun pegawai akan disinkronkan langsung dari isi Google Spreadsheet Anda.'
-    );
-    if (!confirmPull) return;
 
     setTesting(true);
     try {
@@ -151,40 +184,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       if (res.success) {
         setGasConfig(gasService.getConfig());
         onRefreshAll();
-        alert(`✅ ${res.message}`);
+        setActionFeedback({
+          message: `✅ ${res.message}`,
+          type: 'success'
+        });
       } else {
-        alert(`Gagal menarik data: ${res.message}`);
+        setActionFeedback({
+          message: `Gagal menarik data: ${res.message}`,
+          type: 'error'
+        });
       }
     } catch (err: any) {
-      alert(`Error: ${err.message || 'Gagal koneksi ke Spreadsheet'}`);
+      setActionFeedback({
+        message: `Error: ${err.message || 'Gagal koneksi ke Spreadsheet'}`,
+        type: 'error'
+      });
     } finally {
       setTesting(false);
+      setTimeout(() => setActionFeedback(null), 5000);
     }
   };
 
   const handleClearDummyData = () => {
-    const confirmClear = confirm(
-      '⚠️ PERINGATAN BERSIHKAN DATA CONTOH / DUMMY:\n\n' +
-      'Apakah Anda yakin ingin membersihkan data contoh (transaksi demo, dropping demo, dan barang contoh)?\n\n' +
-      'Sistem akan dikosongkan agar data murni dan real berasal dari Google Spreadsheet Anda.'
-    );
-    if (!confirmClear) return;
-
     const res = storageService.clearDummyData(true);
     onRefreshAll();
-    alert(res.message);
+    setActionFeedback({
+      message: res.message || 'Data contoh/dummy berhasil dibersihkan! Aplikasi kini fokus murni pada data Google Spreadsheet.',
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   // --- WHATSAPP & BOT HANDLERS ---
   const handleSaveWaConfig = (e: React.FormEvent) => {
     e.preventDefault();
     storageService.saveWhatsappConfig(waConfig);
-    alert('Konfigurasi API WhatsApp & Robot Bot berhasil disimpan!');
+    setActionFeedback({
+      message: 'Konfigurasi API WhatsApp & Robot Bot berhasil disimpan!',
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   const handleSendTestWhatsapp = async () => {
     if (!waConfig.targetNumber) {
-      alert('Masukkan nomor WhatsApp tujuan terlebih dahulu.');
+      setActionFeedback({
+        message: 'Masukkan nomor WhatsApp tujuan terlebih dahulu.',
+        type: 'error'
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
       return;
     }
     setTesting(true);
@@ -265,7 +313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       {
         id: `bot-${Date.now()}`,
         sender: 'BOT',
-        text: `Percakapan telah direset. Silakan tanyakan stok barang seperti *paracetamol*, *stok kritis*, atau *stok tidung*.`,
+        text: `Percakapan telah direset. Silakan tanyakan stok barang seperti *amoxicillin*, *stok kritis*, atau nama gudang seperti *stok tidung*.`,
         timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -310,15 +358,65 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     e.preventDefault();
     storageService.saveLogoConfig(logoConfig);
     onRefreshAll();
-    alert('Pengaturan teks Kop Surat & Logo resmi berhasil diperbarui!');
+    setActionFeedback({
+      message: 'Pengaturan teks Kop Surat & Logo resmi berhasil disimpan!',
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
+  };
+
+  const handleApplyDriveLogo = (customAssetId?: string) => {
+    const assetId = (customAssetId || driveAssetInput || DEFAULT_DRIVE_ASSET_ID).trim();
+    const driveThumbUrl = getGoogleDriveThumbnailUrl(assetId, 400);
+    const updated: AppLogoConfig = {
+      ...logoConfig,
+      driveAssetId: assetId,
+      driveAssetUrl: driveThumbUrl,
+      logoJayaRaya: driveThumbUrl,
+      logoKesehatan: driveThumbUrl,
+      useDriveAsset: true
+    };
+    setLogoConfig(updated);
+    storageService.saveLogoConfig(updated);
+    onRefreshAll();
+    setActionFeedback({
+      message: `Logo resmi dari Google Drive (Asset: ${assetId}) berhasil dipasang pada Kop Surat!`,
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   const handleResetLogosToDefault = () => {
-    if (confirm('Kembalikan logo Jaya Raya dan Logo Kesehatan ke setelan logo resmi standar?')) {
-      const reseted = storageService.resetLogoConfig();
-      setLogoConfig(reseted);
+    const reseted = storageService.resetLogoConfig();
+    setLogoConfig(reseted);
+    onRefreshAll();
+    setActionFeedback({
+      message: 'Logo telah dikembalikan ke logo resmi bawaan DKI Jakarta & Bakti Husada.',
+      type: 'info'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
+  };
+
+  const handleClearLocalDemoData = async () => {
+    setIsClearingDemo(true);
+    try {
+      storageService.clearDummyData(true);
+      if (gasConfig.webAppUrl) {
+        await gasService.syncAllFromSheets();
+      }
       onRefreshAll();
-      alert('Logo telah dikembalikan ke logo resmi bawaan DKI Jakarta & Bakti Husada.');
+      setActionFeedback({
+        message: 'Data permintaan, logistik, dan transaksi mutasi demo di browser lokal telah berhasil dibersihkan! Aplikasi kini fokus murni pada data Google Spreadsheet.',
+        type: 'success'
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        message: `Pembersihan lokal selesai: ${err.message || ''}`,
+        type: 'info'
+      });
+    } finally {
+      setIsClearingDemo(false);
+      setTimeout(() => setActionFeedback(null), 5000);
     }
   };
 
@@ -348,26 +446,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
           setWaConfig(storageService.getWhatsappConfig());
           setLogoConfig(storageService.getLogoConfig());
           setGasConfig(gasService.getConfig());
-          alert('Database berhasil dipulihkan dari file backup!');
+          setActionFeedback({
+            message: 'Database berhasil dipulihkan dari file backup!',
+            type: 'success'
+          });
         } else {
-          alert(`Gagal memulihkan database: ${res.message}`);
+          setActionFeedback({
+            message: `Gagal memulihkan database: ${res.message}`,
+            type: 'error'
+          });
         }
       } catch (err: any) {
-        alert('File JSON tidak valid');
+        setActionFeedback({
+          message: 'File JSON backup tidak valid',
+          type: 'error'
+        });
       }
+      setTimeout(() => setActionFeedback(null), 4000);
     };
     reader.readAsText(file);
   };
 
   const handleResetData = () => {
-    if (confirm('PERINGATAN: Yakin ingin mereset seluruh database ke data awal bawaan sistem? Seluruh perubahan baru akan terhapus.')) {
-      storageService.resetToInitialData();
-      onRefreshAll();
-      setWaConfig(storageService.getWhatsappConfig());
-      setLogoConfig(storageService.getLogoConfig());
-      setGasConfig(gasService.getConfig());
-      alert('Data sistem telah direset ke setelan awal Puskesmas Kepulauan Seribu Selatan.');
-    }
+    storageService.resetToInitialData();
+    onRefreshAll();
+    setWaConfig(storageService.getWhatsappConfig());
+    setLogoConfig(storageService.getLogoConfig());
+    setGasConfig(gasService.getConfig());
+    setActionFeedback({
+      message: 'Data sistem telah direset ke setelan awal Puskesmas Kepulauan Seribu Selatan.',
+      type: 'info'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   const googleAppsScriptCode = generateGoogleAppsScriptCode(gasConfig.spreadsheetId);
@@ -493,6 +603,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
           Backup & Reset Data
         </button>
       </div>
+
+      {/* Action Notification Banner */}
+      {actionFeedback && (
+        <div className={`p-4 rounded-2xl text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 border shadow-xs animate-in fade-in slide-in-from-top-2 ${
+          actionFeedback.type === 'success'
+            ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+            : actionFeedback.type === 'error'
+            ? 'bg-rose-50 text-rose-900 border-rose-300'
+            : 'bg-teal-50 text-teal-900 border-teal-300'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {actionFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            ) : actionFeedback.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+            ) : (
+              <Check className="w-5 h-5 text-teal-600 flex-shrink-0" />
+            )}
+            <span>{actionFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-xs px-2.5 py-1 bg-white/80 hover:bg-white rounded-lg border border-slate-300 text-slate-700"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
 
       {/* TAB 1: WHATSAPP BOT & GATEWAY */}
       {activeTab === 'WHATSAPP_BOT' && (
@@ -704,7 +842,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                 Staf di Puskesmas Kelurahan Pulau Tidung, Pustu Pari, Pustu Lancang, dan Pusling Payung dapat mengirim chat teks berikut ke nomor WhatsApp Bot untuk cek stok seketika:
               </p>
               <div className="bg-slate-950 p-3 rounded-xl font-mono text-[11px] space-y-1.5 border border-slate-800 text-emerald-300">
-                <div>💬 <strong>cek paracetamol</strong> ➔ Cek stok Paracetamol di semua pulau</div>
+                <div>💬 <strong>cek amoxicillin</strong> ➔ Cek stok barang riil di semua pulau</div>
                 <div>💬 <strong>stok kritis</strong> ➔ Lihat daftar obat/barang yang menipis</div>
                 <div>💬 <strong>stok tidung</strong> ➔ Lihat stok lengkap di Sub Gudang Tidung</div>
                 <div>💬 <strong>stok pari</strong> ➔ Lihat persediaan di Pustu Pari</div>
@@ -748,12 +886,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               <span className="text-slate-400 flex-shrink-0 font-semibold flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-amber-400" /> Contoh Cepat:
               </span>
-              <button
-                onClick={() => handleSendBotMessage('cek paracetamol')}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-emerald-900 hover:text-emerald-300 text-slate-200 rounded-full whitespace-nowrap border border-slate-700 transition-colors"
-              >
-                💊 Cek Paracetamol
-              </button>
               <button
                 onClick={() => handleSendBotMessage('stok kritis')}
                 className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900 hover:text-amber-300 text-slate-200 rounded-full whitespace-nowrap border border-slate-700 transition-colors"
@@ -855,7 +987,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ketik nama barang, contoh: cek paracetamol..."
+                  placeholder="Ketik nama obat/barang, contoh: cek amoxicillin, cek stok..."
                   className="flex-1 bg-[#2a3942] text-white text-xs px-4 py-2.5 rounded-full placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <button
@@ -893,11 +1025,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               <button
                 type="button"
                 onClick={handleResetLogosToDefault}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-300 flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-300 flex items-center gap-1.5 transition-colors self-start sm:self-auto cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
                 Kembalikan Logo Bawaan
               </button>
+            </div>
+
+            {/* Card Khusus: Logo Kop Surat Resmi dari Google Drive (Asset: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5) */}
+            <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-slate-900 rounded-2xl p-5 text-white shadow-md border border-teal-700/60 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center font-bold text-teal-300 border border-white/20">
+                    <Cloud className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-extrabold text-white">
+                        Logo Resmi dari Google Drive
+                      </h3>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] rounded-full font-bold">
+                        Tersambung
+                      </span>
+                    </div>
+                    <p className="text-xs text-teal-200">
+                      ID Asset: <strong className="font-mono bg-teal-950/70 px-1.5 py-0.5 rounded border border-teal-600/40">1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5</strong> (Logo Kesehatan & Logo Jaya Raya)
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleApplyDriveLogo(driveAssetInput)}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-md transition-all self-start sm:self-auto cursor-pointer active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  Terapkan Logo dari Google Drive
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-black/30 p-3 rounded-xl border border-white/10 text-xs">
+                <div className="flex-1 flex items-center gap-2">
+                  <span className="text-teal-300 font-bold whitespace-nowrap text-[11px]">ID File Asset Google Drive:</span>
+                  <input
+                    type="text"
+                    value={driveAssetInput}
+                    onChange={(e) => setDriveAssetInput(e.target.value)}
+                    placeholder="1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5"
+                    className="w-full bg-slate-950/80 border border-teal-500/40 rounded-lg px-3 py-1.5 text-xs text-teal-100 font-mono focus:outline-none focus:ring-1 focus:ring-teal-400"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://drive.google.com/file/d/${driveAssetInput || DEFAULT_DRIVE_ASSET_ID}/view`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Lihat di Google Drive
+                  </a>
+                </div>
+              </div>
             </div>
 
             {/* Two Logo Upload Cards */}

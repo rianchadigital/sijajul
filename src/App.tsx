@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { PanelLeftOpen } from 'lucide-react';
 import { storageService } from './services/storageService';
 import { gasService } from './services/gasService';
 import { User, Notification } from './types';
@@ -38,9 +39,29 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => storageService.getCurrentUser());
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sijajul_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [botModalOpen, setBotModalOpen] = useState(false);
+
+  const handleToggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(prev => !prev);
+    } else {
+      setIsSidebarCollapsed(prev => {
+        const next = !prev;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sijajul_sidebar_collapsed', String(next));
+        }
+        return next;
+      });
+    }
+  };
 
   // Badge counts
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
@@ -213,7 +234,7 @@ export default function App() {
       case 'master_pegawai':
       case 'master-pegawai':
       case 'profil':
-        return <MasterUserView currentUser={currentUser} onSwitchUser={handleSwitchUser} />;
+        return <MasterUserView currentUser={currentUser} />;
       case 'audit_log':
       case 'audit-log':
         return <AuditLogView currentUser={currentUser} />;
@@ -231,12 +252,11 @@ export default function App() {
         currentUser={currentUser}
         activeView={activeView}
         onNavigate={handleNavigate}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onToggleSidebar={handleToggleSidebar}
+        isSidebarCollapsed={isSidebarCollapsed}
         onOpenSearch={() => setSearchModalOpen(true)}
         onOpenNotifs={() => setNotifDrawerOpen(true)}
-        onOpenBot={() => setBotModalOpen(true)}
         onLogout={handleLogout}
-        onSwitchUser={handleSwitchUser}
         onSync={handleSyncData}
         isSyncing={isSyncing}
         unreadNotifCount={unreadNotifsCount}
@@ -265,6 +285,18 @@ export default function App() {
         </div>
       )}
 
+      {/* Floating Reopen Menu Tab (when desktop sidebar is hidden) */}
+      {isSidebarCollapsed && (
+        <button
+          onClick={handleToggleSidebar}
+          className="hidden md:flex fixed left-0 top-20 z-20 bg-teal-800 hover:bg-teal-700 text-white py-2 px-3 rounded-r-xl shadow-lg border-y border-r border-teal-600 items-center gap-1.5 text-xs font-bold transition-all cursor-pointer hover:pl-4 group"
+          title="Tampilkan Menu Samping"
+        >
+          <PanelLeftOpen className="w-4 h-4 text-teal-200 group-hover:scale-110 transition-transform" />
+          <span>Buka Menu</span>
+        </button>
+      )}
+
       {/* Main App Layout */}
       <div className="flex-1 flex pt-16 pb-20 md:pb-8">
         {/* Sidebar Navigation */}
@@ -274,13 +306,15 @@ export default function App() {
           currentUser={currentUser}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
           pendingApprovalCount={pendingApprovalCount}
           pendingDroppingCount={pendingDroppingCount}
           pendingReceivingCount={pendingReceivingCount}
         />
 
-        {/* Dynamic Content Area */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        {/* Dynamic Content Area - Full screen width when sidebar is collapsed/hidden */}
+        <main className={`flex-1 min-w-0 p-4 sm:p-6 lg:p-8 transition-all duration-200 ${isSidebarCollapsed ? 'w-full max-w-none px-4 sm:px-8 lg:px-10' : 'max-w-7xl mx-auto w-full'}`}>
           {renderActiveView()}
         </main>
       </div>
@@ -308,15 +342,13 @@ export default function App() {
         onNavigate={handleNavigate}
       />
 
+      {/* Floating Chatbot Cek Stok Icon (Melayang) */}
+      <FloatingRobotButton onClick={() => setBotModalOpen(true)} />
+
       {/* WhatsApp Stock Robot Modal */}
       <WhatsappBotModal
         isOpen={botModalOpen}
         onClose={() => setBotModalOpen(false)}
-      />
-
-      {/* Floating Robot Chatbot Button (Melayang) */}
-      <FloatingRobotButton
-        onClick={() => setBotModalOpen(true)}
       />
     </div>
   );

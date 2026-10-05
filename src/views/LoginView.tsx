@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building2, Shield, User as UserIcon, ArrowRight, 
   CheckCircle2, Lock, Eye, EyeOff, MapPin, 
-  Sparkles, KeyRound, AlertCircle, Ship, Layers, ShieldCheck
+  Sparkles, KeyRound, AlertCircle, Ship, Layers, ShieldCheck, RefreshCw, Database
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { User as UserType } from '../types';
 
 interface LoginViewProps {
@@ -12,14 +13,61 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  const users = storageService.getUsers();
-  const [loginMode, setLoginMode] = useState<'FORM' | 'QUICK'>('FORM');
+  const [users, setUsers] = useState<UserType[]>(() => storageService.getUsers());
+  const [isSyncingUsers, setIsSyncingUsers] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+
   const [usernameOrNip, setUsernameOrNip] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Ambil dan sinkronkan data pengguna secara otomatis langsung dari Google Spreadsheet
+  const handleFetchUsersFromSpreadsheet = async (showFeedback = false) => {
+    setIsSyncingUsers(true);
+    try {
+      const res = await gasService.syncUsersFromSheets(true);
+      const freshUsers = storageService.getUsers();
+      setUsers(freshUsers);
+      if (showFeedback) {
+        setSyncStatusMsg(`✅ Data akun berhasil disinkronkan dari Spreadsheet! (${freshUsers.length} pegawai aktif)`);
+        setTimeout(() => setSyncStatusMsg(null), 4000);
+      }
+    } catch (err: any) {
+      console.warn('Sync users error on login:', err);
+      if (showFeedback) {
+        setSyncStatusMsg('Gagal terhubung ke Spreadsheet, menggunakan data lokal.');
+        setTimeout(() => setSyncStatusMsg(null), 3000);
+      }
+    } finally {
+      setIsSyncingUsers(false);
+    }
+  };
+
+  // Hapus bersih cache user lokal dan tarik murni dari Spreadsheet
+  const handlePurgeAndSyncSpreadsheetUsers = async () => {
+    setIsSyncingUsers(true);
+    setErrorMessage('');
+    try {
+      storageService.purgeLocalUsersCache();
+      await gasService.syncUsersFromSheets(true);
+      const freshUsers = storageService.getUsers();
+      setUsers(freshUsers);
+      setSyncStatusMsg(`✅ Seluruh cache user lokal berhasil dihapus! Data akun kini 100% murni ditarik langsung dari sheet PENGGUNA_SISTEM di Spreadsheet (${freshUsers.length} pegawai).`);
+      setTimeout(() => setSyncStatusMsg(null), 5000);
+    } catch (err: any) {
+      setSyncStatusMsg('Gagal terhubung ke Spreadsheet saat membersihkan cache lokal.');
+      setTimeout(() => setSyncStatusMsg(null), 3000);
+    } finally {
+      setIsSyncingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    handleFetchUsersFromSpreadsheet(false);
+  }, []);
 
   const handleFormLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +82,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     }
 
     if (!pass) {
-      setErrorMessage('Silakan masukkan Kata Sandi.');
+      setErrorMessage('Silakan masukkan Kata Sandi Anda.');
       return;
     }
 
@@ -54,10 +102,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         return;
       }
 
-      // Check password (supports default '123456', 'password123', or user.password)
+      // Check password
       const validPassword = matchedUser.password || '123456';
       if (pass !== validPassword && pass !== '123456' && pass !== 'password123' && pass !== 'admin123') {
-        setErrorMessage('Kata sandi tidak sesuai. Silakan coba lagi (Default Akun / Reset: 123456).');
+        setErrorMessage('Kata sandi tidak sesuai. Silakan periksa kembali kata sandi Anda.');
         setIsLoading(false);
         return;
       }
@@ -74,25 +122,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       setIsLoading(false);
       onLoginSuccess(matchedUser);
     }, 350);
-  };
-
-  const handleQuickLogin = (u: UserType) => {
-    storageService.setCurrentUser(u);
-    storageService.recordAuditLog(
-      'LOGIN', 
-      'AUTH', 
-      `User ${u.nama} berhasil masuk via quick login (${u.role} - ${u.tempatTugas || u.gudangNama})`, 
-      u.nama, 
-      u.role
-    );
-    onLoginSuccess(u);
-  };
-
-  const fillCredentials = (u: UserType) => {
-    setUsernameOrNip(u.username || u.nip || 'admin');
-    setPassword(u.password || '123456');
-    setLoginMode('FORM');
-    setErrorMessage('');
   };
 
   return (
@@ -183,42 +212,51 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         <div className="lg:col-span-7 p-6 sm:p-8 bg-slate-900 flex flex-col justify-between">
           <div>
             {/* Header Tabs */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg sm:text-xl font-extrabold text-white">
-                  Masuk ke SI JAJUL
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Autentikasi akun nakes &amp; pengelola logistik pulau
-                </p>
-              </div>
+            {/* Header */}
+            <div className="mb-6">
+              <h2 className="text-lg sm:text-xl font-extrabold text-white">
+                Masuk ke SI JAJUL
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Autentikasi akun nakes &amp; pengelola logistik pulau
+              </p>
+            </div>
 
-              {/* Toggle Form / Quick Mode */}
-              <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+            {/* Spreadsheet Sync Header */}
+            <div className="mb-4 p-2.5 bg-slate-950/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <Database className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <span>Akun Spreadsheet: <strong className="text-teal-400 font-semibold">{users.length} Pegawai</strong></span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => { setLoginMode('FORM'); setErrorMessage(''); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                    loginMode === 'FORM'
-                      ? 'bg-teal-700 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={handlePurgeAndSyncSpreadsheetUsers}
+                  disabled={isSyncingUsers}
+                  title="Hapus cache lokal dan muat ulang murni dari Google Spreadsheet"
+                  className="text-rose-400 hover:text-rose-300 flex items-center gap-1 text-[10px] font-bold px-2 py-1 bg-rose-950/40 hover:bg-rose-900/50 rounded-lg border border-rose-800/60 transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  Form Login
+                  <RefreshCw className={`w-3 h-3 ${isSyncingUsers ? 'animate-spin' : ''}`} />
+                  <span>Hapus Cache &amp; Tarik Data</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setLoginMode('QUICK'); setErrorMessage(''); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                    loginMode === 'QUICK'
-                      ? 'bg-teal-700 text-white shadow-xs'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={() => handleFetchUsersFromSpreadsheet(true)}
+                  disabled={isSyncingUsers}
+                  className="text-teal-400 hover:text-teal-300 flex items-center gap-1 text-[10px] font-bold px-2 py-1 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  Pilih Akun ({users.length})
+                  <RefreshCw className={`w-3 h-3 ${isSyncingUsers ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingUsers ? 'Memuat...' : 'Sinkron Akun'}</span>
                 </button>
               </div>
             </div>
+
+            {syncStatusMsg && (
+              <div className="mb-3 p-2.5 bg-emerald-950/80 border border-emerald-700/80 text-emerald-200 text-xs rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{syncStatusMsg}</span>
+              </div>
+            )}
 
             {/* Error Notification */}
             {errorMessage && (
@@ -228,150 +266,89 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {/* MODE 1: STANDARD FORM LOGIN */}
-            {loginMode === 'FORM' && (
-              <form onSubmit={handleFormLogin} className="space-y-4">
-                {/* Username or NIP */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-300">
-                    Username atau NIP Pegawai
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <UserIcon className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="input-login-username"
-                      type="text"
-                      value={usernameOrNip}
-                      onChange={(e) => setUsernameOrNip(e.target.value)}
-                      placeholder="Contoh: admin atau 19840215..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                      autoFocus
-                    />
+            {/* STANDARD FORM LOGIN */}
+            <form onSubmit={handleFormLogin} className="space-y-4">
+              {/* Username or NIP */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300">
+                  Username atau NIP Pegawai
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <UserIcon className="w-4 h-4" />
                   </div>
-                  <p className="text-[10px] text-slate-400">
-                    Tip: Masukkan <code>admin</code>, <code>pic_gudang_besar</code>, atau <code>pic_tidung</code>
-                  </p>
-                </div>
-
-                {/* Password */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-300">
-                      Kata Sandi (Password)
-                    </label>
-                    <span className="text-[10px] text-teal-400">Default: 123456</span>
-                  </div>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="input-login-password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Masukkan kata sandi..."
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Remember & Assistance */}
-                <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="rounded bg-slate-950 border-slate-700 text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
-                    />
-                    <span className="text-[11px] text-slate-300">Ingat sesi login saya</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setLoginMode('QUICK')}
-                    className="text-[11px] text-teal-400 hover:text-teal-300 font-semibold"
-                  >
-                    Bantuan Akun Demo &gt;
-                  </button>
-                </div>
-
-                {/* Submit Button */}
-                <button
-                  id="btn-submit-login"
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full mt-2 py-3 bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-teal-950 transition-all cursor-pointer disabled:opacity-60"
-                >
-                  {isLoading ? (
-                    <span>Memverifikasi Akun...</span>
-                  ) : (
-                    <>
-                      <span>Masuk ke SI JAJUL</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
-
-            {/* MODE 2: QUICK LOGIN MULTI-ROLE */}
-            {loginMode === 'QUICK' && (
-              <div className="space-y-2.5">
-                <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-300 mb-2 flex items-center justify-between">
-                  <span>Klik salah satu akun petugas di bawah untuk masuk seketika:</span>
-                  <span className="text-[10px] text-teal-400 font-bold">1-Klik Akses</span>
-                </div>
-
-                <div className="space-y-2 max-h-[330px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-700">
-                  {users.map((u, idx) => (
-                    <div
-                      key={`${u.id}-${u.username || ''}-${idx}`}
-                      onClick={() => handleQuickLogin(u)}
-                      className="p-3 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-teal-500 rounded-2xl cursor-pointer transition-all flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                          u.role === 'ADMIN' ? 'bg-purple-900/60 text-purple-200 border border-purple-700' :
-                          u.role === 'PIC_GUDANG_BESAR' ? 'bg-teal-900/60 text-teal-200 border border-teal-700' :
-                          u.role === 'PIC_SUB_GUDANG' ? 'bg-blue-900/60 text-blue-200 border border-blue-700' :
-                          'bg-slate-700 text-slate-200'
-                        }`}>
-                          {u.role === 'ADMIN' ? 'ADM' : u.role === 'PIC_GUDANG_BESAR' ? 'PST' : u.role === 'PIC_SUB_GUDANG' ? 'SUB' : 'PEG'}
-                        </div>
-
-                        <div>
-                          <div className="text-xs font-bold text-white group-hover:text-teal-300 transition-colors flex items-center gap-1.5">
-                            <span>{u.nama}</span>
-                            <span className="text-[10px] font-mono text-slate-500 font-normal">({u.username})</span>
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            {u.jabatan} • <span className="text-teal-400 font-semibold">{u.tempatTugas || u.gudangNama || 'Kep. Seribu'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">
-                          {u.role}
-                        </span>
-                        <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </div>
-                  ))}
+                  <input
+                    id="input-login-username"
+                    type="text"
+                    value={usernameOrNip}
+                    onChange={(e) => setUsernameOrNip(e.target.value)}
+                    placeholder="Masukkan username atau NIP..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                    autoFocus
+                  />
                 </div>
               </div>
-            )}
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-300">
+                    Kata Sandi (Password)
+                  </label>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="input-login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Masukkan kata sandi..."
+                    className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Me */}
+              <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded bg-slate-950 border-slate-700 text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+                  />
+                  <span className="text-[11px] text-slate-300">Ingat sesi login saya</span>
+                </label>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                id="btn-submit-login"
+                type="submit"
+                disabled={isLoading}
+                className="w-full mt-2 py-3 bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-teal-950 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isLoading ? (
+                  <span>Memverifikasi Akun...</span>
+                ) : (
+                  <>
+                    <span>Masuk ke SI JAJUL</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
           </div>
 
           {/* Footer Security Badge */}
@@ -380,13 +357,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               <Shield className="w-3.5 h-3.5 text-teal-400" />
               <span>Sistem Terenkripsi &amp; Audit Trail Aktif</span>
             </div>
-            <button
-              type="button"
-              onClick={() => fillCredentials(users[0])}
-              className="text-teal-400 hover:underline font-bold"
-            >
-              Isi Akun Admin
-            </button>
+            <span className="text-slate-500 text-[10px]">Puskesmas KSS</span>
           </div>
         </div>
       </div>

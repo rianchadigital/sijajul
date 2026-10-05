@@ -30,7 +30,7 @@ export class WhatsappBotService {
         `_Layanan Otomatis Jaga Stok & Jalur Logistik Kepulauan Seribu Selatan_\n\n` +
         `Silakan ketik perintah pengecekan:\n` +
         `🔹 *cek [nama barang]*\n` +
-        `   Contoh: \`cek paracetamol\`, \`cek kertas hvs\`, \`cek spuit\`\n` +
+        `   Contoh: \`cek amoxicillin\`, \`cek kertas hvs\`, \`cek spuit\`\n` +
         `🔹 *stok kritis* / *stok menipis*\n` +
         `   Melihat daftar barang yang berada di bawah stok minimum\n` +
         `🔹 *stok [nama pulau/gudang]*\n` +
@@ -178,7 +178,7 @@ export class WhatsappBotService {
           `❌ *BARANG TIDAK DITEMUKAN*\n` +
           `Pencarian untuk: _"${raw}"_ tidak cocok dengan katalog barang SI-GUDANG.\n\n` +
           `💡 *Saran Pencarian:*\n` +
-          `• Coba gunakan kata kunci umum (contoh: \`paracetamol\`, \`kertas\`, \`masker\`, \`spuit\`, \`sabun\`)\n` +
+          `• Coba gunakan kata kunci umum (contoh: \`amoxicillin\`, \`kertas\`, \`masker\`, \`spuit\`, \`sabun\`)\n` +
           `• Ketik *bantuan* untuk panduan format.`
       };
     }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, Filter, Download, Plus, 
-  CreditCard, RefreshCw, AlertTriangle
+  CreditCard, RefreshCw, AlertTriangle, CheckCircle2, Database
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { Warehouse, Category, Item, WarehouseStock, User } from '../types';
 import { StatusBadge } from '../components/common/Badge';
 import { ExcelService } from '../services/excelService';
@@ -29,12 +30,21 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
   // Modal Adjustment State
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustItem, setAdjustItem] = useState<{ itemId: string; warehouseId: string; currentBalance: number; itemName: string; warehouseName: string; satuan: string } | null>(null);
-  const [adjustType, setAdjustType] = useState<'MASUK' | 'KELUAR'>('MASUK');
+  const [adjustType, setAdjustType] = useState<'MASUK' | 'KELUAR' | 'SET_SALDO'>('MASUK');
   const [adjustQty, setAdjustQty] = useState<number>(1);
   const [adjustNotes, setAdjustNotes] = useState<string>('');
+  const [isSavingAdjust, setIsSavingAdjust] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'ADMIN';
   const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+  };
 
   const loadData = () => {
     const whs = storageService.getWarehouses();
@@ -138,10 +148,11 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
     setShowAdjustModal(true);
   };
 
-  const handleSaveAdjustment = (e: React.FormEvent) => {
+  const handleSaveAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustItem) return;
 
+    setIsSavingAdjust(true);
     try {
       if (adjustType === 'MASUK') {
         storageService.recordTransaction(
@@ -152,7 +163,7 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
           0,
           `Penyesuaian stok masuk manual: ${adjustNotes || 'Penyesuaian fisik'}`
         );
-      } else {
+      } else if (adjustType === 'KELUAR') {
         storageService.recordTransaction(
           adjustItem.warehouseId,
           adjustItem.itemId,
@@ -161,12 +172,48 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
           adjustQty,
           `Penyesuaian stok keluar manual: ${adjustNotes || 'Pengeluaran/kerusakan'}`
         );
+      } else if (adjustType === 'SET_SALDO') {
+        const diff = adjustQty - adjustItem.currentBalance;
+        if (diff > 0) {
+          storageService.recordTransaction(
+            adjustItem.warehouseId,
+            adjustItem.itemId,
+            'PENYESUAIAN_OPNAME',
+            diff,
+            0,
+            `Koreksi saldo fisik (+${diff}): ${adjustNotes || 'Koreksi langsung'}`
+          );
+        } else if (diff < 0) {
+          storageService.recordTransaction(
+            adjustItem.warehouseId,
+            adjustItem.itemId,
+            'PENYESUAIAN_OPNAME',
+            0,
+            Math.abs(diff),
+            `Koreksi saldo fisik (${diff}): ${adjustNotes || 'Koreksi langsung'}`
+          );
+        }
       }
 
       setShowAdjustModal(false);
       loadData();
+
+      // Sinkronkan data stok yang diperbarui langsung ke Google Spreadsheet
+      try {
+        const updateRes = await gasService.updateStockToSheets(
+          adjustItem.itemName,
+          adjustItem.warehouseName,
+          adjustQty
+        );
+        showToast(updateRes.message || `✅ Stok barang "${adjustItem.itemName}" berhasil di-update!`, 'success');
+      } catch (sheetErr: any) {
+        showToast(`✅ Stok barang "${adjustItem.itemName}" berhasil di-update (sinkronisasi terjadwal)`, 'success');
+      }
+
     } catch (err: any) {
-      alert(err.message || 'Gagal menyimpan penyesuaian');
+      showToast(err.message || 'Gagal menyimpan penyesuaian', 'error');
+    } finally {
+      setIsSavingAdjust(false);
     }
   };
 
@@ -204,6 +251,36 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div 
+          className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-sm animate-in fade-in-50 duration-200 ${
+            toastMessage.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+              : toastMessage.type === 'info'
+              ? 'bg-blue-50 text-blue-800 border-blue-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : toastMessage.type === 'info' ? (
+              <RefreshCw className="w-4 h-4 text-blue-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-slate-600 ml-4 font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {!isSuperAdmin && (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-2">
@@ -426,46 +503,64 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
 
             <form onSubmit={handleSaveAdjustment} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Jenis Penyesuaian</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Pilih Tindakan Update Stok</label>
+                <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setAdjustType('MASUK')}
-                    className={`py-2 text-xs font-bold rounded-xl border transition-colors ${
+                    onClick={() => { setAdjustType('MASUK'); setAdjustQty(1); }}
+                    className={`py-2 px-1 text-xs font-bold rounded-xl border transition-colors cursor-pointer text-center ${
                       adjustType === 'MASUK' 
                         ? 'bg-emerald-50 border-emerald-500 text-emerald-800' 
-                        : 'border-slate-200 text-slate-600'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    + Tambah Stok (Masuk)
+                    + Masuk
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAdjustType('KELUAR')}
-                    className={`py-2 text-xs font-bold rounded-xl border transition-colors ${
+                    onClick={() => { setAdjustType('KELUAR'); setAdjustQty(1); }}
+                    className={`py-2 px-1 text-xs font-bold rounded-xl border transition-colors cursor-pointer text-center ${
                       adjustType === 'KELUAR' 
                         ? 'bg-rose-50 border-rose-500 text-rose-800' 
-                        : 'border-slate-200 text-slate-600'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    - Kurangi Stok (Keluar)
+                    - Keluar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAdjustType('SET_SALDO'); setAdjustQty(adjustItem.currentBalance); }}
+                    className={`py-2 px-1 text-xs font-bold rounded-xl border transition-colors cursor-pointer text-center ${
+                      adjustType === 'SET_SALDO' 
+                        ? 'bg-blue-50 border-blue-500 text-blue-800' 
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    = Set Saldo
                   </button>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Jumlah Penyesuaian ({adjustItem.satuan})
+                  {adjustType === 'SET_SALDO'
+                    ? `Saldo Fisik Baru (${adjustItem.satuan})`
+                    : `Jumlah Penyesuaian (${adjustItem.satuan})`}
                 </label>
                 <input
                   type="number"
-                  min="1"
-                  max={adjustType === 'KELUAR' ? adjustItem.currentBalance : 9999}
+                  min={adjustType === 'SET_SALDO' ? 0 : 1}
+                  max={adjustType === 'KELUAR' ? adjustItem.currentBalance : 999999}
                   required
                   value={adjustQty}
                   onChange={(e) => setAdjustQty(parseInt(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-600 focus:outline-none font-bold"
                 />
+                {adjustType === 'SET_SALDO' && (
+                  <p className="text-[11px] text-blue-700 mt-1">
+                    Saldo saat ini: <strong>{adjustItem.currentBalance}</strong> &bull; Selisih: <strong>{adjustQty - adjustItem.currentBalance > 0 ? `+${adjustQty - adjustItem.currentBalance}` : adjustQty - adjustItem.currentBalance} {adjustItem.satuan}</strong>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -475,7 +570,7 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Koreksi selisih fisik / barang rusak"
+                  placeholder="Contoh: Koreksi selisih fisik / mutasi langsung / barang rusak"
                   value={adjustNotes}
                   onChange={(e) => setAdjustNotes(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-600 focus:outline-none"
@@ -485,16 +580,25 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSavingAdjust}
                   onClick={() => setShowAdjustModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold bg-teal-800 hover:bg-teal-900 text-white rounded-xl shadow"
+                  disabled={isSavingAdjust}
+                  className="px-4 py-2 text-xs font-bold bg-teal-800 hover:bg-teal-900 disabled:opacity-50 text-white rounded-xl shadow cursor-pointer flex items-center gap-1.5"
                 >
-                  Simpan Transaksi
+                  {isSavingAdjust ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan ke Spreadsheet...</span>
+                    </>
+                  ) : (
+                    <span>Simpan &amp; Update Stok</span>
+                  )}
                 </button>
               </div>
             </form>

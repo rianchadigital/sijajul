@@ -12,10 +12,10 @@ import { User, Warehouse, Role } from '../types';
 
 interface MasterUserViewProps {
   currentUser: User | null;
-  onSwitchUser: (user: User) => void;
+  onSwitchUser?: (user: User) => void;
 }
 
-export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onSwitchUser }) => {
+export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onSwitchUser: _onSwitchUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,6 +104,27 @@ export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onS
       setSyncFeedback({
         type: 'error',
         message: e.message || 'Gagal sinkronisasi data pengguna dari Google Apps Script'
+      });
+    } finally {
+      setIsSyncingSheets(false);
+    }
+  };
+
+  const handlePurgeAndSyncSpreadsheetUsers = async () => {
+    setIsSyncingSheets(true);
+    setSyncFeedback(null);
+    try {
+      storageService.purgeLocalUsersCache();
+      const res = await gasService.syncUsersFromSheets(true);
+      loadData();
+      setSyncFeedback({
+        type: res.success ? 'success' : 'error',
+        message: `✅ Seluruh data user login di browser lokal berhasil dibersihkan! Data akun kini 100% murni ditarik langsung dari sheet PENGGUNA_SISTEM di Spreadsheet.`
+      });
+    } catch (e: any) {
+      setSyncFeedback({
+        type: 'error',
+        message: e.message || 'Gagal sinkronisasi data pengguna dari Google Spreadsheet'
       });
     } finally {
       setIsSyncingSheets(false);
@@ -397,6 +418,17 @@ export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onS
         <div className="flex items-center gap-2.5 flex-wrap">
           {isSuperAdmin && (
             <>
+              <button
+                id="btn-purge-sync-users"
+                onClick={handlePurgeAndSyncSpreadsheetUsers}
+                disabled={isSyncingSheets}
+                title="Hapus seluruh cache pengguna di lokal browser dan tarik data murni dari Spreadsheet"
+                className="px-3.5 py-2.5 bg-rose-900/60 hover:bg-rose-800 border border-rose-700/80 text-rose-100 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 text-rose-300 ${isSyncingSheets ? 'animate-spin' : ''}`} />
+                <span>Hapus Cache &amp; Tarik Data Spreadsheet</span>
+              </button>
+
               <button
                 id="btn-sync-users-gas"
                 onClick={handleSyncFromGas}
@@ -739,18 +771,6 @@ export const MasterUserView: React.FC<MasterUserViewProps> = ({ currentUser, onS
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-
-                          {/* Quick Switch User (Simulasi) */}
-                          {!isCurrent && (
-                            <button
-                              id={`btn-switch-user-${u.id}`}
-                              onClick={() => onSwitchUser(u)}
-                              className="px-2 py-1 bg-slate-100 hover:bg-teal-800 text-slate-700 hover:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                              title="Masuk sebagai akun ini"
-                            >
-                              Masuk
-                            </button>
-                          )}
 
                           {/* Delete Button (Super Admin only, not self) */}
                           {isSuperAdmin && !isCurrent && (

@@ -367,6 +367,9 @@ export interface WhatsappConfig {
 export interface AppLogoConfig {
   logoJayaRaya: string; // Base64 or Image URL
   logoKesehatan: string; // Base64 or Image URL
+  driveAssetId?: string; // Google Drive file ID (misal: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5)
+  driveAssetUrl?: string; // Direct image URL from Google Drive
+  useDriveAsset?: boolean; // Gunakan asset Google Drive langsung
   namaPemprov: string;
   namaDinas: string;
   namaPuskesmas: string;

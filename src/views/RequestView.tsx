@@ -137,20 +137,38 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
   };
 
   // Filter list
-  const filteredRequests = requests.filter(req => {
-    const userWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+  const activeUser = currentUser || storageService.getCurrentUser();
+  const roleUpper = (activeUser?.role || '').toUpperCase();
+  const isPegawai = roleUpper === 'PEGAWAI' || roleUpper === 'STAFF' || (!['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG'].includes(roleUpper));
 
-    if (currentUser?.role === 'PEGAWAI') {
-      if (req.gudangTujuanId !== userWhId && req.gudangAsalId !== userWhId && req.pemohonId !== currentUser.id) {
+  const filteredRequests = requests.filter(req => {
+    const userWhId = userAssignedWarehouse?.id || activeUser?.gudangId;
+
+    if (isPegawai && activeUser) {
+      // Pembatasan Akses KETAT: Pegawai HANYA DAPAT melihat daftar permintaan miliknya sendiri
+      const myId = String(activeUser.id || '').trim().toLowerCase();
+      const myNip = String(activeUser.nip || '').trim();
+      const myNama = String(activeUser.nama || '').trim().toLowerCase();
+      const myUsername = String(activeUser.username || '').trim().toLowerCase();
+
+      const reqPemohonId = String(req.pemohonId || '').trim().toLowerCase();
+      const reqPemohonNip = String(req.pemohonNip || '').trim();
+      const reqPemohonNama = String(req.pemohonNama || '').trim().toLowerCase();
+
+      const matchId = Boolean(myId && reqPemohonId && reqPemohonId === myId);
+      const matchNip = Boolean(myNip && reqPemohonNip && reqPemohonNip === myNip);
+      const matchNama = Boolean(myNama && reqPemohonNama && (reqPemohonNama === myNama || reqPemohonNama.includes(myNama) || myNama.includes(reqPemohonNama)));
+      const matchUsername = Boolean(myUsername && (reqPemohonNip === myUsername || reqPemohonId === myUsername));
+
+      const isMyRequest = matchId || matchNip || matchNama || matchUsername;
+      if (!isMyRequest) {
         return false;
       }
-    }
-    if (currentUser?.role === 'PIC_SUB_GUDANG') {
-      if (req.gudangTujuanId !== userWhId && req.gudangAsalId !== userWhId && req.pemohonId !== currentUser.id) {
+    } else if (activeUser?.role === 'PIC_SUB_GUDANG') {
+      if (req.gudangTujuanId !== userWhId && req.gudangAsalId !== userWhId && req.pemohonId !== activeUser.id) {
         return false;
       }
-    }
-    if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+    } else if (activeUser?.role === 'PIC_GUDANG_BESAR') {
       if (req.gudangAsalId !== gudangBesar.id && req.gudangTujuanId !== gudangBesar.id) {
         return false;
       }
@@ -246,6 +264,19 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
           </button>
         </div>
       </div>
+
+      {/* Banner Khusus Login Pegawai */}
+      {isPegawai && activeUser && (
+        <div className="bg-teal-50 border border-teal-200 text-teal-900 px-4 py-3 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-teal-800 bg-teal-200/80 px-2 py-0.5 rounded">Filter Akun Pegawai:</span>
+            <span>Menampilkan khusus daftar permintaan milik <strong>{activeUser.nama}</strong> ({activeUser.nip ? `NIP: ${activeUser.nip}` : `Username: ${activeUser.username}`}).</span>
+          </div>
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-teal-700 text-white shrink-0 self-start sm:self-auto">
+            {filteredRequests.length} Permintaan Saya
+          </span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">

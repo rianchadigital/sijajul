@@ -72,6 +72,19 @@ const STORAGE_KEYS = {
   PROPOSALS: 'sijajul_proposals_v1',
 };
 
+// Helper untuk mendeteksi dan mengeliminasi akun demo sepenuhnya
+export const isDemoUser = (u: any): boolean => {
+  if (!u) return false;
+  const nama = String(u.nama || '').toLowerCase().trim();
+  const nip = String(u.nip || '').trim();
+  const username = String(u.username || '').toLowerCase().trim();
+  if (u.isDemo === true) return true;
+  if (nip === '197805122005011003') return true; // dr. Ahmad Zulkarnain
+  if (nama.includes('zulkarnain') || nama.includes('dr. ahmad')) return true;
+  if (nama === 'user demo' || nama.includes('akun demo') || username === 'demo') return true;
+  return false;
+};
+
 class StorageService {
   private getItem<T>(key: string, fallback: T): T {
     try {
@@ -161,22 +174,9 @@ class StorageService {
       return `USR-${String(fallbackSeq).padStart(3, '0')}`;
     };
 
-    // Helper untuk mendeteksi dan mengeliminasi akun demo sepenuhnya
-    const isDemoUserAccount = (u: any): boolean => {
-      if (!u) return false;
-      const nama = String(u.nama || '').toLowerCase().trim();
-      const nip = String(u.nip || '').trim();
-      const username = String(u.username || '').toLowerCase().trim();
-      if (u.isDemo === true) return true;
-      if (nip === '197805122005011003') return true; // dr. Ahmad Zulkarnain
-      if (nama.includes('zulkarnain') || nama.includes('dr. ahmad')) return true;
-      if (nama === 'user demo' || nama.includes('akun demo') || username === 'demo') return true;
-      return false;
-    };
-
     // Process candidate users from storage, deduplicating strictly by ID, NIP, and username, and FILTERING OUT DEMO ACCOUNTS
     const rawCandidates = Array.isArray(rawUsers) && rawUsers.length > 0 ? rawUsers : INITIAL_USERS;
-    const candidates = rawCandidates.filter(u => !isDemoUserAccount(u));
+    const candidates = rawCandidates.filter(u => !isDemoUser(u));
 
     candidates.forEach((u, idx) => {
       if (!u) return;

@@ -68,6 +68,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
   const [namaBarang, setNamaBarang] = useState('');
   const [kategoriId, setKategoriId] = useState('');
   const [satuan, setSatuan] = useState('Pcs');
+  const [hargaSatuan, setHargaSatuan] = useState<number>(0);
   const [merk, setMerk] = useState('');
   const [spesifikasi, setSpesifikasi] = useState('');
   const [stokMinimum, setStokMinimum] = useState(10);
@@ -103,6 +104,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     setNamaBarang('');
     setKategoriId(categories[0]?.id || '');
     setSatuan('Pcs');
+    setHargaSatuan(0);
     setMerk('');
     setSpesifikasi('');
     setStokMinimum(10);
@@ -118,8 +120,9 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     setNamaBarang(item.namaBarang);
     setKategoriId(item.kategoriId);
     setSatuan(item.satuan);
-    setMerk(item.merk);
-    setSpesifikasi(item.spesifikasi);
+    setHargaSatuan(item.hargaSatuan || item.hargaEstimasi || 0);
+    setMerk(item.merk || '');
+    setSpesifikasi(item.spesifikasi || '');
     setStokMinimum(item.stokMinimum);
     setStatusAktif(item.statusAktif);
     setKeterangan(item.keterangan || '');
@@ -167,6 +170,8 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
       merk: merk.trim(),
       spesifikasi: spesifikasi.trim(),
       stokMinimum,
+      hargaSatuan: Number(hargaSatuan) || 0,
+      hargaEstimasi: Number(hargaSatuan) || 0,
       statusAktif,
       keterangan: keterangan.trim()
     };
@@ -214,7 +219,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
       'Nama Barang': i.namaBarang,
       'Kategori': i.kategoriNama,
       'Satuan': i.satuan,
-      'Merk': i.merk,
+      'Harga Satuan (Rp)': i.hargaSatuan || i.hargaEstimasi || 0,
       'Spesifikasi': i.spesifikasi,
       'Stok Minimum': i.stokMinimum,
       'Status': i.statusAktif ? 'Aktif' : 'Nonaktif',
@@ -303,6 +308,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
           spesifikasi: r.spesifikasi,
           stokMinimum: r.stokMinimum,
           stokAwalGudangBesar: r.stokAwalGudangBesar,
+          hargaSatuan: r.hargaSatuan,
           keterangan: r.keterangan
         })),
         {
@@ -361,11 +367,13 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     if (categoryFilter !== 'ALL' && item.kategoriId !== categoryFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
+      const priceStr = String(item.hargaSatuan || item.hargaEstimasi || '');
       return (
         item.namaBarang.toLowerCase().includes(q) ||
         item.kodeBarang.toLowerCase().includes(q) ||
-        item.merk.toLowerCase().includes(q) ||
-        item.kategoriNama.toLowerCase().includes(q)
+        (item.merk && item.merk.toLowerCase().includes(q)) ||
+        item.kategoriNama.toLowerCase().includes(q) ||
+        priceStr.includes(q)
       );
     }
     return true;
@@ -517,7 +525,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
           <input
             id="input-search-master-barang"
             type="text"
-            placeholder="Cari kode barang, nama, merk, kategori..."
+            placeholder="Cari kode barang, nama, harga satuan, kategori..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
@@ -554,7 +562,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 <th className="px-4 py-3">Nama Barang</th>
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Satuan</th>
-                <th className="px-4 py-3">Merk / Pabrik</th>
+                <th className="px-4 py-3 text-right">Harga Satuan</th>
                 <th className="px-4 py-3 text-center">Stok Min</th>
                 <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-center w-24">Aksi</th>
@@ -585,7 +593,9 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                       </span>
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-700">{item.satuan}</td>
-                    <td className="px-4 py-3 text-slate-600">{item.merk || '-'}</td>
+                    <td className="px-4 py-3 text-right font-bold text-teal-800">
+                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.hargaSatuan || item.hargaEstimasi || 0)}
+                    </td>
                     <td className="px-4 py-3 text-center font-bold text-slate-700">{item.stokMinimum}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1067,14 +1077,19 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Merk / Pabrikan</label>
-                  <input
-                    type="text"
-                    placeholder="Kimia Farma / Sinar Dunia"
-                    value={merk}
-                    onChange={(e) => setMerk(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Harga Satuan (Rp)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="0"
+                      value={hargaSatuan || ''}
+                      onChange={(e) => setHargaSatuan(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -1090,15 +1105,27 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Spesifikasi Detail</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Dus isi 10 strip @ 10 tablet"
-                  value={spesifikasi}
-                  onChange={(e) => setSpesifikasi(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Merk / Pabrik (Opsional)</label>
+                  <input
+                    type="text"
+                    placeholder="Kimia Farma / Sinar Dunia"
+                    value={merk}
+                    onChange={(e) => setMerk(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Spesifikasi Detail</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Dus isi 10 strip @ 10 tablet"
+                    value={spesifikasi}
+                    onChange={(e) => setSpesifikasi(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl"
+                  />
+                </div>
               </div>
 
               <div>

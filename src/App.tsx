@@ -37,7 +37,16 @@ import { ProposalView } from './views/ProposalView';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => storageService.getCurrentUser());
-  const [activeView, setActiveView] = useState<string>('dashboard');
+  const [activeView, setActiveView] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlView = params.get('view');
+        if (urlView) return urlView;
+      } catch {}
+    }
+    return 'dashboard';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -81,7 +90,7 @@ export default function App() {
 
     const pendingAppr = requests.filter(r => r.status === 'DIAJUKAN' || r.status === 'DIPERIKSA').length;
     const pendingDrp = requests.filter(r => r.status === 'DISETUJUI').length;
-    const pendingRec = droppings.filter(d => d.status === 'DROPPING' || d.status === 'DIPROSES').length;
+    const pendingRec = droppings.filter(d => d.status !== 'SELESAI' && d.status !== 'DITERIMA').length;
     const unread = notifs.filter(n => !n.isRead).length;
 
     setPendingApprovalCount(pendingAppr);

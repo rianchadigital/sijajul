@@ -6,6 +6,7 @@ import {
 import { storageService } from '../services/storageService';
 import { ItemRequest, Item, Warehouse, User } from '../types';
 import { StatusBadge } from '../components/common/Badge';
+import { WhatsappShareModal, WhatsappShareData } from '../components/common/WhatsappShareModal';
 
 interface RequestViewProps {
   onNavigate?: (viewId: string) => void;
@@ -35,6 +36,10 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
   const [selectedRequest, setSelectedRequest] = useState<ItemRequest | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // WhatsApp Share State
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [waShareData, setWaShareData] = useState<WhatsappShareData | null>(null);
 
   const loadData = () => {
     setRequests(storageService.getRequests());
@@ -113,27 +118,73 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
 
     setIsSubmitting(true);
     try {
+      let createdReq: ItemRequest;
       if (currentUser?.role === 'PEGAWAI') {
         const assignedWh = userAssignedWarehouse || warehouses[0];
-        storageService.createRequest(validItems, catatanPemohon, assignedWh.id, assignedWh.id);
+        createdReq = storageService.createRequest(validItems, catatanPemohon, assignedWh.id, assignedWh.id);
       } else if (currentUser?.role === 'PIC_SUB_GUDANG') {
         const subWh = userAssignedWarehouse || warehouses[0];
-        storageService.createRequest(validItems, catatanPemohon, subWh.id, gudangBesar.id);
+        createdReq = storageService.createRequest(validItems, catatanPemohon, subWh.id, gudangBesar.id);
       } else {
-        storageService.createRequest(validItems, catatanPemohon, targetWarehouseId, gudangBesar.id);
+        createdReq = storageService.createRequest(validItems, catatanPemohon, targetWarehouseId, gudangBesar.id);
       }
+
       setShowCreateModal(false);
       setCatatanPemohon('');
       setFormItems([{ barangId: '', jumlahDiminta: 1, keterangan: '' }]);
       loadData();
       if (onRefreshStats) onRefreshStats();
-      setFeedbackMsg('Permintaan berhasil diajukan!');
-      setTimeout(() => setFeedbackMsg(null), 3000);
+      setFeedbackMsg('Permintaan berhasil diajukan! Anda dapat membagikan notifikasi langsung ke WhatsApp.');
+      setTimeout(() => setFeedbackMsg(null), 4000);
+
+      // Siapkan data WhatsApp share dengan link langsung ke approval
+      const targetWh = warehouses.find(w => w.id === createdReq.gudangTujuanId) || gudangBesar;
+      setWaShareData({
+        type: 'PERMINTAAN',
+        nomorDokumen: createdReq.nomorPermintaan,
+        tanggal: createdReq.tanggalPermintaan,
+        namaPengaju: createdReq.pemohonNama,
+        kontakPengaju: currentUser?.noHp || '',
+        gudangAsal: createdReq.gudangAsalNama,
+        gudangTujuan: createdReq.gudangTujuanNama,
+        items: createdReq.items.map(it => ({
+          namaBarang: it.namaBarang,
+          jumlah: it.jumlahDiminta,
+          satuan: it.satuan
+        })),
+        catatan: createdReq.catatanPemohon,
+        deepLinkView: 'approval',
+        targetPhone: targetWh?.picKontak || '',
+        targetRoleName: `PIC ${createdReq.gudangTujuanNama}`
+      });
+      setWaModalOpen(true);
     } catch (err: any) {
       setModalError(err.message || 'Gagal membuat permintaan. Silakan coba lagi.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleShareExistingRequest = (req: ItemRequest) => {
+    const targetWh = warehouses.find(w => w.id === req.gudangTujuanId) || gudangBesar;
+    setWaShareData({
+      type: 'PERMINTAAN',
+      nomorDokumen: req.nomorPermintaan,
+      tanggal: req.tanggalPermintaan,
+      namaPengaju: req.pemohonNama,
+      gudangAsal: req.gudangAsalNama,
+      gudangTujuan: req.gudangTujuanNama,
+      items: (req.items || []).map(it => ({
+        namaBarang: it.namaBarang,
+        jumlah: it.jumlahDiminta,
+        satuan: it.satuan
+      })),
+      catatan: req.catatanPemohon,
+      deepLinkView: 'approval',
+      targetPhone: targetWh?.picKontak || '',
+      targetRoleName: `PIC ${req.gudangTujuanNama}`
+    });
+    setWaModalOpen(true);
   };
 
   // Filter list
@@ -358,13 +409,22 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                       <StatusBadge status={req.status} />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setSelectedRequest(req)}
-                        className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold rounded-lg transition-colors inline-flex items-center gap-1"
-                        title="Lihat Rincian Permintaan"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Detail
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedRequest(req)}
+                          className="px-2 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]"
+                          title="Lihat Rincian Permintaan"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Detail
+                        </button>
+                        <button
+                          onClick={() => handleShareExistingRequest(req)}
+                          className="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]"
+                          title="Kirim Notifikasi via WhatsApp"
+                        >
+                          <Send className="w-3.5 h-3.5" /> WA
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -691,7 +751,19 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedRequest) {
+                    handleShareExistingRequest(selectedRequest);
+                  }
+                }}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" /> Kirim Notifikasi WhatsApp
+              </button>
+
               <button
                 type="button"
                 onClick={() => setSelectedRequest(null)}
@@ -703,6 +775,13 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
           </div>
         </div>
       )}
+
+      {/* WHATSAPP SHARE MODAL */}
+      <WhatsappShareModal
+        isOpen={waModalOpen}
+        onClose={() => setWaModalOpen(false)}
+        shareData={waShareData}
+      />
     </div>
   );
 };

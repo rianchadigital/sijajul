@@ -637,6 +637,16 @@ function doPost(e) {
       appendRowToTable("PERMINTAAN_BARANG", payload.request);
       result = { status: "success", message: "Permintaan logistik berhasil disimpan ke Spreadsheet" };
     }
+    else if (action === "uploadLogo" || action === "saveLogoToDrive") {
+      var logoRes = saveLogoToDrive(payload.base64Data, payload.logoType, payload.fileName, payload.mimeType);
+      result = { 
+        status: "success", 
+        message: "Logo berhasil disimpan permanen di Google Drive!", 
+        url: logoRes.url,
+        fileId: logoRes.fileId,
+        configKey: logoRes.configKey
+      };
+    }
     else {
       result = { status: "error", message: "Aksi POST tidak dikenali: " + action };
     }
@@ -794,6 +804,86 @@ function appendRowToTable(sheetName, item) {
     row.push(val);
   });
   sheet.appendRow(row);
+}
+
+/**
+ * Menyimpan file logo ke Google Drive (folder SIJAJUL_ASSETS) secara permanen
+ * dan mencatat URL publiknya ke sheet CONFIG_SISTEM agar sinkron global di semua browser.
+ */
+function saveLogoToDrive(base64Data, logoType, fileName, mimeType) {
+  var ss = getSpreadsheet();
+  if (!base64Data) throw new Error("Data base64 gambar logo kosong.");
+
+  var cleanBase64 = base64Data;
+  var detectedMime = mimeType || "image/png";
+  if (base64Data.indexOf(",") !== -1) {
+    var parts = base64Data.split(",");
+    var header = parts[0];
+    cleanBase64 = parts[1];
+    if (header.indexOf("image/jpeg") !== -1 || header.indexOf("image/jpg") !== -1) {
+      detectedMime = "image/jpeg";
+    } else if (header.indexOf("image/svg+xml") !== -1) {
+      detectedMime = "image/svg+xml";
+    } else if (header.indexOf("image/webp") !== -1) {
+      detectedMime = "image/webp";
+    }
+  }
+
+  var decodedBytes = Utilities.base64Decode(cleanBase64);
+  var typeKey = (logoType === "jaya_raya" || logoType === "JAYA_RAYA") ? "jaya_raya" : "kesehatan";
+  var actualFileName = fileName || ("sijajul_logo_" + typeKey + "_" + new Date().getTime() + ".png");
+  var blob = Utilities.newBlob(decodedBytes, detectedMime, actualFileName);
+
+  // Cari atau buat folder SIJAJUL_ASSETS di Google Drive
+  var folderIterator = DriveApp.getFoldersByName("SIJAJUL_ASSETS");
+  var folder;
+  if (folderIterator.hasNext()) {
+    folder = folderIterator.next();
+  } else {
+    folder = DriveApp.createFolder("SIJAJUL_ASSETS");
+    try {
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch(err) {}
+  }
+
+  var file = folder.createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch(err) {}
+
+  var fileId = file.getId();
+  var directUrl = "https://lh3.googleusercontent.com/d/" + fileId;
+
+  // Simpan secara permanen ke sheet CONFIG_SISTEM
+  var configKey = typeKey === "jaya_raya" ? "LOGO_JAYA_RAYA" : "LOGO_KESEHATAN";
+  var sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+  if (!sheetCfg) {
+    setupDatabase();
+    sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+  }
+
+  var lastRow = sheetCfg.getLastRow();
+  var found = false;
+  if (lastRow > 1) {
+    var data = sheetCfg.getRange(2, 1, lastRow - 1, 2).getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0] === configKey) {
+        sheetCfg.getRange(i + 2, 2).setValue(directUrl);
+        sheetCfg.getRange(i + 2, 5).setValue(new Date().toISOString());
+        found = true;
+        break;
+      }
+    }
+  }
+  if (!found) {
+    sheetCfg.appendRow([configKey, directUrl, "BRANDING", "URL Logo Kop Surat Google Drive", new Date().toISOString()]);
+  }
+
+  return {
+    fileId: fileId,
+    url: directUrl,
+    configKey: configKey
+  };
 }
 
 // ==============================================================================
@@ -1439,6 +1529,62 @@ export class GasService {
   static isAutoSyncActive(): boolean {
     const cfg = storageService.getSheetsConfig();
     return Boolean(cfg.gasDeploymentUrl && cfg.autoSync);
+  }
+
+  /**
+   * Mengunggah file logo secara permanen ke Google Drive melalui Web App Apps Script
+   * dan mencatatnya ke CONFIG_SISTEM Spreadsheet agar dapat dilihat secara global oleh semua pengguna.
+   */
+  static async uploadLogoToDrive(
+    base64Data: string,
+    logoType: 'jaya_raya' | 'kesehatan',
+    fileName?: string
+  ): Promise<{ success: boolean; url?: string; fileId?: string; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) return { success: false, message: 'URL Web App Apps Script belum dikonfigurasi.' };
+
+    try {
+      const payload = {
+        action: 'uploadLogo',
+        logoType,
+        base64Data,
+        fileName: fileName || `logo_${logoType}_${Date.now()}.png`
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const resJson = await response.json();
+      if (resJson.status === 'success' && resJson.url) {
+        return {
+          success: true,
+          url: resJson.url,
+          fileId: resJson.fileId,
+          message: 'Logo berhasil disimpan permanen ke Google Drive dan disinkronkan ke Spreadsheet!'
+        };
+      } else {
+        return {
+          success: false,
+          message: resJson.message || 'Gagal menyimpan logo ke Google Drive.'
+        };
+      }
+    } catch (e: any) {
+      console.error('Error uploading logo to Drive:', e);
+      return {
+        success: false,
+        message: e.message || 'Gagal koneksi ke Google Apps Script saat mengunggah logo.'
+      };
+    }
   }
 }
 

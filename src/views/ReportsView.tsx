@@ -14,9 +14,19 @@ interface ReportsViewProps {
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
-  const [reportType, setReportType] = useState<string>('STOK_SEMUA');
+  const isSuperAdmin = currentUser?.role === 'ADMIN';
+  const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
+  const isPicPustu = !isSuperAdmin && !isPicBesar;
+  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
+
+  const [reportType, setReportType] = useState<string>(() => {
+    return isPicPustu ? 'STOK_GUDANG' : 'STOK_SEMUA';
+  });
   const [period, setPeriod] = useState<'HARI_INI' | 'MINGGU_INI' | 'BULAN_INI' | 'TAHUN_INI'>('BULAN_INI');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('ALL');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>(() => {
+    if (isPicPustu && userAssignedWarehouse) return userAssignedWarehouse.id;
+    return 'ALL';
+  });
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('ALL');
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -26,9 +36,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [requests, setRequests] = useState<ItemRequest[]>([]);
   const [droppings, setDroppings] = useState<Dropping[]>([]);
-
-  const isSuperAdmin = currentUser?.role === 'ADMIN';
-  const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
 
   useEffect(() => {
     const whs = storageService.getWarehouses();
@@ -46,17 +53,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         setSelectedWarehouseId(gb.id);
       } else if (userAssignedWarehouse) {
         setSelectedWarehouseId(userAssignedWarehouse.id);
+        setReportType(prev => prev === 'STOK_SEMUA' ? 'STOK_GUDANG' : prev);
       }
     }
   }, [currentUser]);
 
   const reportTitles: Record<string, string> = {
     'STOK_SEMUA': 'Laporan Stok Persediaan Semua Gudang',
-    'STOK_GUDANG': 'Laporan Stok per Unit Gudang',
+    'STOK_GUDANG': isPicPustu ? `Laporan Stok ${userAssignedWarehouse?.namaGudang || 'Sub Gudang'}` : 'Laporan Stok per Unit Gudang',
     'MASUK': 'Laporan Penerimaan Barang Masuk',
     'KELUAR': 'Laporan Pengeluaran & Distribusi Barang Keluar',
     'PERMINTAAN': 'Laporan Permintaan Barang & Realisasi Approval',
-    'DROPPING': 'Laporan Rekapitulasi Dropping Logistik',
+    'DROPPING': isPicPustu ? 'Laporan Dropping Logistik Diterima' : 'Laporan Rekapitulasi Dropping Logistik',
     'KRITIS': 'Laporan Stok Menipis & Kritis (Di Bawah Stok Minimum)',
     'KATEGORI': 'Laporan Rekapitulasi Nilai & Stok per Kategori'
   };
@@ -66,7 +74,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
     switch (reportType) {
       case 'STOK_SEMUA':
       case 'STOK_GUDANG': {
-        const targetWhs = selectedWarehouseId === 'ALL' ? warehouses : warehouses.filter(w => w.id === selectedWarehouseId);
+        // PEMBATASAN KETAT: PIC Gudang Pustu & Pegawai DILARANG KERAS melihat laporan Gudang Besar KSS
+        let targetWhs: Warehouse[] = [];
+        if (isSuperAdmin) {
+          targetWhs = selectedWarehouseId === 'ALL' ? warehouses : warehouses.filter(w => w.id === selectedWarehouseId);
+        } else if (isPicBesar) {
+          targetWhs = warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR' || w.id === 'GUD-001');
+        } else {
+          // PIC Pustu / Pegawai: hanya gudang penugasannya saja, Gudang Besar KSS diblokir total
+          const myWh = userAssignedWarehouse || warehouses.find(w => w.id === currentUser?.gudangId);
+          targetWhs = myWh ? [myWh] : [];
+        }
+
         return items.flatMap(item => {
           if (selectedCategoryId !== 'ALL' && item.kategoriId !== selectedCategoryId) return [];
           return targetWhs.map(wh => {
@@ -86,7 +105,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         });
       }
       case 'MASUK': {
-        return transactions.filter(t => t.masuk > 0).map(t => ({
+        let filteredTrx = transactions.filter(t => t.masuk > 0);
+        if (isPicPustu) {
+          const myWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+          const myWhName = userAssignedWarehouse?.namaGudang?.toLowerCase() || '';
+          filteredTrx = filteredTrx.filter(t => 
+            (myWhId && t.gudangId === myWhId) || 
+            (myWhName && t.gudangNama?.toLowerCase().includes(myWhName))
+          );
+        } else if (isPicBesar) {
+          filteredTrx = filteredTrx.filter(t => t.gudangId === 'GUD-001' || t.gudangNama?.toLowerCase().includes('besar') || t.gudangNama?.toLowerCase().includes('induk'));
+        }
+
+        return filteredTrx.map(t => ({
           col1: t.tanggal,
           col2: t.nomorTransaksi,
           col3: t.gudangNama,
@@ -98,7 +129,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         }));
       }
       case 'KELUAR': {
-        return transactions.filter(t => t.keluar > 0).map(t => ({
+        let filteredTrx = transactions.filter(t => t.keluar > 0);
+        if (isPicPustu) {
+          const myWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+          const myWhName = userAssignedWarehouse?.namaGudang?.toLowerCase() || '';
+          filteredTrx = filteredTrx.filter(t => 
+            (myWhId && t.gudangId === myWhId) || 
+            (myWhName && t.gudangNama?.toLowerCase().includes(myWhName))
+          );
+        } else if (isPicBesar) {
+          filteredTrx = filteredTrx.filter(t => t.gudangId === 'GUD-001' || t.gudangNama?.toLowerCase().includes('besar') || t.gudangNama?.toLowerCase().includes('induk'));
+        }
+
+        return filteredTrx.map(t => ({
           col1: t.tanggal,
           col2: t.nomorTransaksi,
           col3: t.gudangNama,
@@ -110,7 +153,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         }));
       }
       case 'PERMINTAAN': {
-        return requests.map(r => ({
+        let filteredReq = requests;
+        if (isPicPustu) {
+          const myWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+          filteredReq = requests.filter(r => 
+            r.gudangTujuanId === myWhId || 
+            r.gudangAsalId === myWhId || 
+            r.pemohonId === currentUser?.id
+          );
+        }
+
+        return filteredReq.map(r => ({
           col1: r.nomorPermintaan,
           col2: r.tanggalPermintaan,
           col3: r.pemohonNama,
@@ -122,7 +175,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         }));
       }
       case 'DROPPING': {
-        return droppings.map(d => ({
+        let filteredDrp = droppings;
+        if (isPicPustu) {
+          const myWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+          filteredDrp = droppings.filter(d => d.gudangTujuanId === myWhId);
+        }
+
+        return filteredDrp.map(d => ({
           col1: d.nomorDropping,
           col2: d.tanggalDropping,
           col3: d.gudangTujuanNama,
@@ -134,8 +193,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         }));
       }
       case 'KRITIS': {
+        let targetKritisWhs: Warehouse[] = [];
+        if (isSuperAdmin) {
+          targetKritisWhs = warehouses;
+        } else if (isPicBesar) {
+          targetKritisWhs = warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR' || w.id === 'GUD-001');
+        } else {
+          const myWh = userAssignedWarehouse || warehouses.find(w => w.id === currentUser?.gudangId);
+          targetKritisWhs = myWh ? [myWh] : [];
+        }
+
         return items.flatMap(item => {
-          return warehouses.map(wh => {
+          return targetKritisWhs.map(wh => {
             const stock = stocks.find(s => s.gudangId === wh.id && s.barangId === item.id);
             const saldo = stock ? stock.saldo : 0;
             if (saldo > item.stokMinimum) return null;
@@ -156,6 +225,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
         return categories.map(cat => {
           const catItems = items.filter(i => i.kategoriId === cat.id);
           const catItemIds = catItems.map(i => i.id);
+
+          if (isPicPustu) {
+            const myWhId = userAssignedWarehouse?.id || currentUser?.gudangId;
+            const catTotalStock = stocks
+              .filter(s => s.gudangId === myWhId && catItemIds.includes(s.barangId))
+              .reduce((acc, s) => acc + s.saldo, 0);
+
+            return {
+              col1: cat.kode,
+              col2: cat.nama,
+              col3: `${catItems.length} jenis item`,
+              col4: userAssignedWarehouse?.namaGudang || 'Sub Gudang Pustu',
+              col5: catTotalStock,
+              col6: 'Unit',
+              col7: '-',
+              col8: 'Aktif'
+            };
+          }
+
           const catTotalStock = stocks.filter(s => catItemIds.includes(s.barangId)).reduce((acc, s) => acc + s.saldo, 0);
           return {
             col1: cat.kode,
@@ -234,14 +322,30 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
 
   return (
     <div className="space-y-6">
-      {!isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+      {isPicPustu && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-amber-800">Pembatasan Laporan:</span>
-            <span>Gudang-gudang Pustu hanya dapat melihat laporan unit gudang penugasan sendiri. Hanya Super Admin yang dapat melihat dan mencetak laporan seluruh gudang.</span>
+            <span className="font-extrabold text-amber-900 bg-amber-200 px-2 py-0.5 rounded-full text-[11px] shrink-0">
+              🔒 Hak Akses Terbatas PIC Pustu
+            </span>
+            <span>
+              Anda hanya berwenang melihat laporan stok unit gudang penugasan Anda (<strong>{userAssignedWarehouse?.namaGudang || 'Sub Gudang'}</strong>). Laporan stok Gudang Puskesmas Kepulauan Seribu Selatan (Gudang Induk) tidak dapat diakses sesuai regulasi kewenangan wilayah.
+            </span>
           </div>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0 self-start sm:self-auto">
             {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
+          </span>
+        </div>
+      )}
+
+      {isPicBesar && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-blue-800">Hak Akses PIC Induk:</span>
+            <span>Menampilkan data laporan persediaan Gudang Puskesmas Kepulauan Seribu Selatan (Gudang Besar KSS).</span>
+          </div>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-200 text-blue-900 shrink-0">
+            Gudang Besar KSS
           </span>
         </div>
       )}
@@ -253,7 +357,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
             Laporan Persediaan & Distribusi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Ekspor laporan resmi Puskesmas Kepulauan Seribu Selatan format Excel dan PDF standar Dinas Kesehatan.
+            {isPicPustu
+              ? `Laporan stok dan mutasi logistik unit ${userAssignedWarehouse?.namaGudang || 'Sub Gudang Pustu'}.`
+              : 'Ekspor laporan resmi Puskesmas Kepulauan Seribu Selatan format Excel dan PDF standar Dinas Kesehatan.'}
           </p>
         </div>
 
@@ -288,14 +394,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ currentUser }) => {
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: 'STOK_SEMUA', label: '1. Stok Semua Gudang' },
-              { id: 'STOK_GUDANG', label: '2. Stok per Gudang' },
-              { id: 'MASUK', label: '3. Barang Masuk' },
-              { id: 'KELUAR', label: '4. Barang Keluar' },
-              { id: 'PERMINTAAN', label: '5. Permintaan Barang' },
-              { id: 'DROPPING', label: '6. Dropping / Distribusi' },
-              { id: 'KRITIS', label: '7. Stok Menipis/Kritis' },
-              { id: 'KATEGORI', label: '8. Rekap per Kategori' },
+              ...(isSuperAdmin ? [{ id: 'STOK_SEMUA', label: '1. Stok Semua Gudang' }] : []),
+              { id: 'STOK_GUDANG', label: isPicPustu ? `1. Stok ${userAssignedWarehouse?.namaGudang?.replace('Gudang ', '') || 'Pustu'}` : '2. Stok per Gudang' },
+              { id: 'MASUK', label: isPicPustu ? '2. Barang Masuk' : '3. Barang Masuk' },
+              { id: 'KELUAR', label: isPicPustu ? '3. Barang Keluar' : '4. Barang Keluar' },
+              { id: 'PERMINTAAN', label: isPicPustu ? '4. Permintaan Barang' : '5. Permintaan Barang' },
+              { id: 'DROPPING', label: isPicPustu ? '5. Dropping Diterima' : '6. Dropping / Distribusi' },
+              { id: 'KRITIS', label: isPicPustu ? '6. Stok Menipis/Kritis' : '7. Stok Menipis/Kritis' },
+              { id: 'KATEGORI', label: isPicPustu ? '7. Rekap per Kategori' : '8. Rekap per Kategori' },
             ].map(item => (
               <button
                 key={item.id}

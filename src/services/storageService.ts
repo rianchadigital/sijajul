@@ -819,6 +819,7 @@ class StorageService {
       spesifikasi?: string;
       stokMinimum?: number;
       stokAwalGudangBesar?: number;
+      hargaSatuan?: number;
       keterangan?: string;
     }[],
     options: {
@@ -883,6 +884,7 @@ class StorageService {
       const matchByCode = cleanKode ? itemCodeMap.get(cleanKode.toLowerCase()) : undefined;
       const matchByName = itemNameMap.get(cleanNama.toLowerCase());
       const existing = matchByCode || matchByName;
+      const parsedPrice = typeof row.hargaSatuan === 'number' && !isNaN(row.hargaSatuan) ? row.hargaSatuan : undefined;
 
       let targetItem: Item;
 
@@ -898,6 +900,8 @@ class StorageService {
           merk: row.merk?.trim() !== undefined ? row.merk.trim() : existing.merk,
           spesifikasi: row.spesifikasi?.trim() !== undefined ? row.spesifikasi.trim() : existing.spesifikasi,
           stokMinimum: typeof row.stokMinimum === 'number' && !isNaN(row.stokMinimum) ? row.stokMinimum : existing.stokMinimum,
+          hargaSatuan: parsedPrice !== undefined ? parsedPrice : (existing.hargaSatuan || existing.hargaEstimasi || 0),
+          hargaEstimasi: parsedPrice !== undefined ? parsedPrice : (existing.hargaEstimasi || existing.hargaSatuan || 0),
           keterangan: row.keterangan?.trim() !== undefined ? row.keterangan.trim() : existing.keterangan,
           statusAktif: true
         };
@@ -920,6 +924,8 @@ class StorageService {
           merk: row.merk?.trim() || '-',
           spesifikasi: row.spesifikasi?.trim() || '',
           stokMinimum: typeof row.stokMinimum === 'number' && !isNaN(row.stokMinimum) ? row.stokMinimum : 10,
+          hargaSatuan: parsedPrice || 0,
+          hargaEstimasi: parsedPrice || 0,
           keterangan: row.keterangan?.trim() || '',
           statusAktif: true
         };
@@ -1575,7 +1581,7 @@ class StorageService {
       masuk: qtyMasuk,
       keluar: qtyKeluar,
       saldoSebelumnya: previousBalance,
-      saldoAkhir: newBalance,
+      saldoAkhir: Math.max(0, newBalance),
       userId: currentUser?.id || 'SYS-001',
       userNama: currentUser?.nama || 'Sistem',
       referensiDokumen: referensiDokumen,
@@ -1981,7 +1987,7 @@ class StorageService {
   ): Dropping {
     const currentUser = this.getCurrentUser();
     const requests = this.getRequests();
-    const reqIndex = requests.findIndex(r => r.id === requestId);
+    const reqIndex = requests.findIndex(r => r.id === requestId || r.nomorPermintaan === requestId);
     if (reqIndex === -1) throw new Error('Permintaan tidak ditemukan');
 
     const req = requests[reqIndex];
@@ -2179,7 +2185,11 @@ class StorageService {
     this.saveDroppings(droppings);
 
     const requests = this.getRequests();
-    const reqIndex = requests.findIndex(r => r.id === dropping.permintaanId);
+    const reqIndex = requests.findIndex(r => 
+      r.id === dropping.permintaanId || 
+      r.nomorPermintaan === dropping.permintaanId || 
+      (dropping.nomorPermintaan && (r.nomorPermintaan === dropping.nomorPermintaan || r.id === dropping.nomorPermintaan))
+    );
     if (reqIndex !== -1) {
       requests[reqIndex].status = 'SELESAI';
       requests[reqIndex].updatedAt = nowStr;
@@ -2199,6 +2209,10 @@ class StorageService {
       'SUCCESS',
       'dropping'
     );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'confirmReceiving', dropping } }));
+    }
 
     return dropping;
   }
@@ -2422,6 +2436,8 @@ class StorageService {
           categoryMap.set(catKey, cat);
         }
 
+        const hargaSatuan = Number(row['Harga Satuan (Rp)'] || row['Harga Satuan'] || row['hargaSatuan'] || row['Harga'] || row['hargaEstimasi'] || 0) || 0;
+
         return {
           id,
           kodeBarang,
@@ -2433,7 +2449,9 @@ class StorageService {
           spesifikasi,
           stokMinimum,
           statusAktif,
-          keterangan
+          keterangan,
+          hargaSatuan,
+          hargaEstimasi: hargaSatuan
         };
       }).filter((i: Item) => !!i.namaBarang);
 
@@ -2580,6 +2598,27 @@ class StorageService {
     if (Array.isArray(sheetData.users) && sheetData.users.length > 0) {
       const userRes = this.importUsersFromSpreadsheetRows(sheetData.users);
       counts.users = userRes.importedCount + userRes.updatedCount;
+    }
+
+    // 8. Konfigurasi Sistem & Logo Google Drive Kop Surat
+    if (Array.isArray(sheetData.config) && sheetData.config.length > 0) {
+      const currentLogos = this.getLogoConfig();
+      let updatedLogos = { ...currentLogos };
+      let hasLogoChanges = false;
+      sheetData.config.forEach((row: any) => {
+        const key = String(row['Kunci Pengaturan (Key)'] || row['key'] || '').trim();
+        const val = String(row['Nilai Pengaturan (Value)'] || row['value'] || '').trim();
+        if (key === 'LOGO_JAYA_RAYA' && val && val.startsWith('http')) {
+          updatedLogos.logoJayaRaya = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_KESEHATAN' && val && val.startsWith('http')) {
+          updatedLogos.logoKesehatan = val;
+          hasLogoChanges = true;
+        }
+      });
+      if (hasLogoChanges) {
+        this.saveLogoConfig(updatedLogos);
+      }
     }
 
     // Update config status

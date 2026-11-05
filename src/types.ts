@@ -58,6 +58,7 @@ export interface Item {
   statusAktif: boolean;
   keterangan: string;
   hargaEstimasi?: number;
+  hargaSatuan?: number;
 }
 
 export interface WarehouseStock {

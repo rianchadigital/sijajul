@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Truck, Plus, Search, Eye, 
   Download, Printer, FileCheck2, FileOutput, 
-  CheckCircle, ArrowRight, Building2, Calendar, MapPin
+  CheckCircle, ArrowRight, Building2, Calendar, MapPin, Send
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { Dropping, ItemRequest, User, Warehouse } from '../types';
 import { StatusBadge } from '../components/common/Badge';
 import { PdfService } from '../services/pdfService';
+import { WhatsappShareModal, WhatsappShareData } from '../components/common/WhatsappShareModal';
 
 interface DroppingViewProps {
   onNavigate: (viewId: string) => void;
@@ -31,6 +32,10 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
   // Modal Detail Dropping
   const [selectedDropping, setSelectedDropping] = useState<Dropping | null>(null);
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // WhatsApp Share State
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [waShareData, setWaShareData] = useState<WhatsappShareData | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToast({ text, type });
@@ -63,9 +68,52 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
       loadData();
       onRefreshStats();
       showToast(`Dropping logistik berhasil diterbitkan! Nomor Dropping: ${newDropping.nomorDropping}, BAST: ${newDropping.nomorBast}, SBBK: ${newDropping.nomorSbbk}`, 'success');
+
+      // Buka modal share WhatsApp untuk memberitahukan PIC Sub Gudang / Group WA
+      const targetWh = warehouses.find(w => w.id === newDropping.gudangTujuanId);
+      setWaShareData({
+        type: 'DROPPING',
+        nomorDokumen: `${newDropping.nomorDropping} (BAST: ${newDropping.nomorBast})`,
+        tanggal: newDropping.tanggalDropping,
+        namaPengaju: newDropping.petugasPengirimNama,
+        gudangAsal: newDropping.gudangAsalNama,
+        gudangTujuan: newDropping.gudangTujuanNama,
+        items: (newDropping.items || []).map(it => ({
+          namaBarang: it.namaBarang,
+          jumlah: it.jumlahDikirim,
+          satuan: it.satuan
+        })),
+        catatan: newDropping.keterangan,
+        deepLinkView: 'receiving',
+        targetPhone: targetWh?.picKontak || '',
+        targetRoleName: `PIC Sub Gudang ${newDropping.gudangTujuanNama}`
+      });
+      setWaModalOpen(true);
     } catch (err: any) {
       showToast(err.message || 'Gagal memproses dropping', 'error');
     }
+  };
+
+  const handleShareExistingDropping = (drp: Dropping) => {
+    const targetWh = warehouses.find(w => w.id === drp.gudangTujuanId);
+    setWaShareData({
+      type: 'DROPPING',
+      nomorDokumen: `${drp.nomorDropping} (BAST: ${drp.nomorBast})`,
+      tanggal: drp.tanggalDropping,
+      namaPengaju: drp.petugasPengirimNama,
+      gudangAsal: drp.gudangAsalNama,
+      gudangTujuan: drp.gudangTujuanNama,
+      items: (drp.items || []).map(it => ({
+        namaBarang: it.namaBarang,
+        jumlah: it.jumlahDikirim,
+        satuan: it.satuan
+      })),
+      catatan: drp.keterangan,
+      deepLinkView: 'receiving',
+      targetPhone: targetWh?.picKontak || '',
+      targetRoleName: `PIC Sub Gudang ${drp.gudangTujuanNama}`
+    });
+    setWaModalOpen(true);
   };
 
   const handlePrintBast = (bastId?: string) => {
@@ -253,6 +301,13 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
                           <FileOutput className="w-3 h-3" /> SBBK
                         </button>
                         <button
+                          onClick={() => handleShareExistingDropping(drp)}
+                          title="Kirim Notifikasi via WhatsApp"
+                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded font-semibold text-[11px] flex items-center gap-1 border border-emerald-200"
+                        >
+                          <Send className="w-3 h-3" /> WA
+                        </button>
+                        <button
                           onClick={() => setSelectedDropping(drp)}
                           title="Lihat Rincian"
                           className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded"
@@ -415,24 +470,37 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
               </div>
 
               {/* Quick Document Download Buttons */}
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={() => handlePrintBast(selectedDropping.nomorBast)}
                   className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
                 >
-                  <Download className="w-4 h-4" /> Unduh Dokumen BAST Resmi (PDF)
+                  <Download className="w-4 h-4" /> Unduh BAST (PDF)
                 </button>
                 <button
                   onClick={() => handlePrintSbbk(selectedDropping.nomorSbbk)}
                   className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
                 >
-                  <Download className="w-4 h-4" /> Unduh Dokumen SBBK Resmi (PDF)
+                  <Download className="w-4 h-4" /> Unduh SBBK (PDF)
+                </button>
+                <button
+                  onClick={() => handleShareExistingDropping(selectedDropping)}
+                  className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  <Send className="w-4 h-4" /> Kirim WhatsApp
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* WHATSAPP SHARE MODAL */}
+      <WhatsappShareModal
+        isOpen={waModalOpen}
+        onClose={() => setWaModalOpen(false)}
+        shareData={waShareData}
+      />
     </div>
   );
 };

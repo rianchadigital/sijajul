@@ -82,6 +82,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [waTestAlertSent, setWaTestAlertSent] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState<'JAYA_RAYA' | 'KESEHATAN' | null>(null);
 
   // File Upload Refs
   const jayaRayaFileRef = useRef<HTMLInputElement>(null);
@@ -328,28 +329,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Harap pilih file gambar (PNG, JPG, JPEG, SVG, WebP).');
+      setActionFeedback({
+        message: 'Harap pilih file gambar (PNG, JPG, JPEG, SVG, WebP).',
+        type: 'error'
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran file maksimal adalah 2MB.');
+    if (file.size > 5 * 1024 * 1024) {
+      setActionFeedback({
+        message: 'Ukuran file maksimal adalah 5MB.',
+        type: 'error'
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64Url = event.target?.result as string;
+
+      // Update preview lokal terlebih dahulu
       if (logoType === 'JAYA_RAYA') {
-        const updated = { ...logoConfig, logoJayaRaya: base64Url };
-        setLogoConfig(updated);
-        storageService.saveLogoConfig(updated);
+        const preview = { ...logoConfig, logoJayaRaya: base64Url };
+        setLogoConfig(preview);
+        storageService.saveLogoConfig(preview);
       } else {
-        const updated = { ...logoConfig, logoKesehatan: base64Url };
-        setLogoConfig(updated);
-        storageService.saveLogoConfig(updated);
+        const preview = { ...logoConfig, logoKesehatan: base64Url };
+        setLogoConfig(preview);
+        storageService.saveLogoConfig(preview);
       }
       onRefreshAll();
+
+      setIsUploadingLogo(logoType);
+      setActionFeedback({
+        message: `⏳ Mengunggah ${logoType === 'JAYA_RAYA' ? 'Logo Jaya Raya' : 'Logo Kesehatan'} ke Google Drive & menyinkronkan ke Spreadsheet...`,
+        type: 'info'
+      });
+
+      try {
+        const gasType = logoType === 'JAYA_RAYA' ? 'jaya_raya' : 'kesehatan';
+        const res = await gasService.uploadLogoToDrive(base64Url, gasType, file.name);
+
+        if (res.success && res.url) {
+          const finalUrl = res.url;
+          if (logoType === 'JAYA_RAYA') {
+            const updated = { ...logoConfig, logoJayaRaya: finalUrl };
+            setLogoConfig(updated);
+            storageService.saveLogoConfig(updated);
+          } else {
+            const updated = { ...logoConfig, logoKesehatan: finalUrl };
+            setLogoConfig(updated);
+            storageService.saveLogoConfig(updated);
+          }
+          onRefreshAll();
+          setActionFeedback({
+            message: `✅ Berhasil! Logo permanen tersimpan di Google Drive & disinkronkan ke Spreadsheet untuk seluruh browser!`,
+            type: 'success'
+          });
+        } else {
+          setActionFeedback({
+            message: `Logo tersimpan di browser lokal. (Google Drive: ${res.message})`,
+            type: 'info'
+          });
+        }
+      } catch (err: any) {
+        setActionFeedback({
+          message: `Gagal upload ke Google Drive: ${err.message || 'Koneksi terputus'}, logo tersimpan di lokal.`,
+          type: 'error'
+        });
+      } finally {
+        setIsUploadingLogo(null);
+        setTimeout(() => setActionFeedback(null), 5000);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -1133,11 +1186,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                     <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                       <button
                         type="button"
+                        disabled={isUploadingLogo === 'JAYA_RAYA'}
                         onClick={() => jayaRayaFileRef.current?.click()}
-                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        Pilih File Logo
+                        <Upload className={`w-3.5 h-3.5 ${isUploadingLogo === 'JAYA_RAYA' ? 'animate-bounce' : ''}`} />
+                        {isUploadingLogo === 'JAYA_RAYA' ? 'Mengunggah ke Drive...' : 'Upload & Simpan ke Drive'}
                       </button>
 
                       {logoConfig.logoJayaRaya && (
@@ -1202,11 +1256,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                     <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                       <button
                         type="button"
+                        disabled={isUploadingLogo === 'KESEHATAN'}
                         onClick={() => kesehatanFileRef.current?.click()}
-                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        Pilih File Logo
+                        <Upload className={`w-3.5 h-3.5 ${isUploadingLogo === 'KESEHATAN' ? 'animate-bounce' : ''}`} />
+                        {isUploadingLogo === 'KESEHATAN' ? 'Mengunggah ke Drive...' : 'Upload & Simpan ke Drive'}
                       </button>
 
                       {logoConfig.logoKesehatan && (

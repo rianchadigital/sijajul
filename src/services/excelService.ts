@@ -12,6 +12,7 @@ export interface ParsedImportItem {
   stokMinimum: number;
   stokAwalGudangBesar: number;
   keterangan: string;
+  hargaSatuan?: number;
   isExisting: boolean;
   status: 'VALID' | 'UPDATE' | 'INVALID';
   errors: string[];
@@ -82,6 +83,7 @@ export class ExcelService {
         'Nama Barang': 'Amoxicillin 500 mg Kapsul',
         'Kategori': 'Obat-obatan (Farmasi)',
         'Satuan': 'Box',
+        'Harga Satuan (Rp)': 45000,
         'Merk / Pabrikan': 'Kimia Farma',
         'Spesifikasi': 'Dus isi 10 strip @ 10 kapsul',
         'Stok Minimum': 20,
@@ -93,6 +95,7 @@ export class ExcelService {
         'Nama Barang': 'Spuit / Jarum Suntik 3 cc Disposable',
         'Kategori': 'BMHP Medis',
         'Satuan': 'Box',
+        'Harga Satuan (Rp)': 95000,
         'Merk / Pabrikan': 'OneMed / Terumo',
         'Spesifikasi': 'Dus isi 100 pcs steril with needle',
         'Stok Minimum': 15,
@@ -104,6 +107,7 @@ export class ExcelService {
         'Nama Barang': 'Tensimeter Digital Lengan Atas',
         'Kategori': 'Alat Kesehatan',
         'Satuan': 'Unit',
+        'Harga Satuan (Rp)': 650000,
         'Merk / Pabrikan': 'Omron',
         'Spesifikasi': 'Tipe HEM-7120 cuff standard',
         'Stok Minimum': 2,
@@ -115,6 +119,7 @@ export class ExcelService {
         'Nama Barang': 'Kertas HVS A4 80 gram Putih',
         'Kategori': 'ATK & Kantor',
         'Satuan': 'Rim',
+        'Harga Satuan (Rp)': 55000,
         'Merk / Pabrikan': 'PaperOne / Sinar Dunia',
         'Spesifikasi': 'Isi 500 lembar per rim',
         'Stok Minimum': 25,
@@ -126,6 +131,7 @@ export class ExcelService {
         'Nama Barang': 'Reagen Golongan Darah Anti-A, B, AB, D',
         'Kategori': 'Laboratorium',
         'Satuan': 'Set',
+        'Harga Satuan (Rp)': 275000,
         'Merk / Pabrikan': 'Fortress Diagnostics',
         'Spesifikasi': 'Vial @ 10 ml per set',
         'Stok Minimum': 5,
@@ -137,6 +143,7 @@ export class ExcelService {
         'Nama Barang': 'Vitamin A 200.000 IU Kapsul Merah',
         'Kategori': 'Gizi & Nutrisi',
         'Satuan': 'Botol',
+        'Harga Satuan (Rp)': 32000,
         'Merk / Pabrikan': 'Kimia Farma',
         'Spesifikasi': 'Botol isi 50 kapsul lunak',
         'Stok Minimum': 10,
@@ -295,6 +302,7 @@ export class ExcelService {
             const rawSpesifikasi = String(getVal(['Spesifikasi', 'Spesifikasi Detail', 'Spec', 'Kemasan', 'Ukuran']) || '').trim();
             const rawStokMin = getVal(['Stok Minimum', 'Stok Min', 'Min Stock', 'Minimal Stok', 'Batas Minimum']);
             const rawStokAwal = getVal(['Stok Awal Gudang Besar', 'Stok Awal', 'Saldo Awal', 'Initial Stock', 'Stok Gudang Induk', 'Stok']);
+            const rawHarga = getVal(['Harga Satuan (Rp)', 'Harga Satuan', 'Harga', 'Unit Price', 'Tarif', 'Harga Estimasi']);
             const rawKeterangan = String(getVal(['Keterangan', 'Keterangan Tambahan', 'Note', 'Notes', 'Catatan']) || '').trim();
 
             // Skip empty rows
@@ -314,6 +322,7 @@ export class ExcelService {
             const satuanClean = rawSatuan || 'Pcs';
             const stokMinNum = Math.max(0, parseInt(String(rawStokMin), 10) || 10);
             const stokAwalNum = Math.max(0, parseInt(String(rawStokAwal), 10) || 0);
+            const hargaClean = Math.max(0, parseInt(String(rawHarga || '').replace(/[^0-9]/g, ''), 10) || 0);
 
             // Check if matches existing item by Code or Name
             const matchByCode = rawKode ? existingCodeMap.get(rawKode.toLowerCase()) : undefined;
@@ -346,6 +355,7 @@ export class ExcelService {
               spesifikasi: rawSpesifikasi,
               stokMinimum: stokMinNum,
               stokAwalGudangBesar: stokAwalNum,
+              hargaSatuan: hargaClean,
               keterangan: rawKeterangan,
               isExisting,
               status,

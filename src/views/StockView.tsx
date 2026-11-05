@@ -100,9 +100,18 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
     }
 
     // Determine which warehouses to list
-    const targetWarehouses = selectedWarehouseId === 'ALL' 
-      ? warehouses 
-      : warehouses.filter(w => w.id === selectedWarehouseId);
+    let targetWarehouses: Warehouse[] = [];
+    if (isSuperAdmin) {
+      targetWarehouses = selectedWarehouseId === 'ALL' 
+        ? warehouses 
+        : warehouses.filter(w => w.id === selectedWarehouseId);
+    } else if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+      targetWarehouses = warehouses.filter(w => w.tipeGudang === 'GUDANG_BESAR' || w.id === 'GUD-001');
+    } else {
+      // PIC Sub Gudang / Pustu & Pegawai: DILARANG KERAS melihat saldo Gudang Besar Puskesmas Kepulauan Seribu Selatan
+      const myWh = userAssignedWarehouse || warehouses.find(w => w.id === currentUser?.gudangId);
+      targetWarehouses = myWh ? [myWh] : [];
+    }
 
     return targetWarehouses.map(wh => {
       const stock = stocks.find(s => s.gudangId === wh.id && s.barangId === item.id) || {
@@ -281,13 +290,15 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
         </div>
       )}
 
-      {!isSuperAdmin && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs flex items-center justify-between shadow-2xs">
+      {!isSuperAdmin && currentUser?.role !== 'PIC_GUDANG_BESAR' && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 shadow-2xs">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-amber-800">Pembatasan Akses Gudang:</span>
-            <span>Gudang-gudang Pustu tidak dapat mengedit Gudang Besar atau gudang lain. Hanya Super Admin yang dapat melihat dan mengedit seluruh gudang.</span>
+            <span className="font-extrabold text-amber-900 bg-amber-200 px-2 py-0.5 rounded-full text-[11px] shrink-0">
+              🔒 Akses Terbatas PIC Pustu
+            </span>
+            <span>Anda hanya berwenang memonitor saldo stok di unit gudang penugasan Anda (<strong>{userAssignedWarehouse?.namaGudang || 'Sub Gudang'}</strong>). Saldo stok Gudang Puskesmas Kepulauan Seribu Selatan (Gudang Induk) tidak dapat diakses.</span>
           </div>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 shrink-0 self-start sm:self-auto">
             {userAssignedWarehouse?.namaGudang || 'Sub Gudang'}
           </span>
         </div>

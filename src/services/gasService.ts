@@ -1,4 +1,5 @@
 import { storageService } from './storageService';
+import { AppLogoConfig } from '../types';
 
 export const generateGoogleAppsScriptCode = (spreadsheetId: string = 'SPREADSHEET_ID_ANDA'): string => {
   return `/**
@@ -466,6 +467,43 @@ function pushAllDataToSheets(data) {
     syncTable("USULAN_BARANG", pRows);
   }
 
+  // 10. Konfigurasi Sistem / Logo Kop Surat
+  if (data.logoConfig && typeof data.logoConfig === "object") {
+    var sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+    if (!sheetCfg) {
+      setupDatabase();
+      sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+    }
+    if (sheetCfg) {
+      var cfgItems = [
+        { key: "LOGO_JAYA_RAYA", val: data.logoConfig.logoJayaRaya || "" },
+        { key: "LOGO_KESEHATAN", val: data.logoConfig.logoKesehatan || "" },
+        { key: "LOGO_NAMA_PEMPROV", val: data.logoConfig.namaPemprov || "" },
+        { key: "LOGO_NAMA_DINAS", val: data.logoConfig.namaDinas || "" },
+        { key: "LOGO_NAMA_PUSKESMAS", val: data.logoConfig.namaPuskesmas || "" },
+        { key: "LOGO_ALAMAT", val: data.logoConfig.alamatPuskesmas || "" },
+        { key: "LOGO_KONTAK", val: data.logoConfig.kontakPuskesmas || "" }
+      ];
+      var lastRowCfg = sheetCfg.getLastRow();
+      var existingMap = {};
+      if (lastRowCfg > 1) {
+        var existingData = sheetCfg.getRange(2, 1, lastRowCfg - 1, 2).getValues();
+        for (var i = 0; i < existingData.length; i++) {
+          existingMap[existingData[i][0]] = i + 2;
+        }
+      }
+      cfgItems.forEach(function(item) {
+        if (!item.val) return;
+        if (existingMap[item.key]) {
+          sheetCfg.getRange(existingMap[item.key], 2).setValue(item.val);
+          sheetCfg.getRange(existingMap[item.key], 5).setValue(new Date().toISOString());
+        } else {
+          sheetCfg.appendRow([item.key, item.val, "BRANDING", "Pengaturan Kop Surat", new Date().toISOString()]);
+        }
+      });
+    }
+  }
+
   return "✅ Sinkronisasi Berhasil! Seluruh data lokal telah tersimpan rapi ke Google Spreadsheet pada " + 
          new Date().toLocaleString("id-ID", { timeZone: CONFIG.TIMEZONE });
 }
@@ -646,6 +684,41 @@ function doPost(e) {
         fileId: logoRes.fileId,
         configKey: logoRes.configKey
       };
+    }
+    else if (action === "saveLogoConfig") {
+      var ss = getSpreadsheet();
+      var sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+      if (!sheetCfg) {
+        setupDatabase();
+        sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+      }
+      var configsToUpdate = [
+        { key: "LOGO_JAYA_RAYA", val: payload.logoJayaRaya || "" },
+        { key: "LOGO_KESEHATAN", val: payload.logoKesehatan || "" },
+        { key: "LOGO_NAMA_PEMPROV", val: payload.namaPemprov || "" },
+        { key: "LOGO_NAMA_DINAS", val: payload.namaDinas || "" },
+        { key: "LOGO_NAMA_PUSKESMAS", val: payload.namaPuskesmas || "" },
+        { key: "LOGO_ALAMAT", val: payload.alamatPuskesmas || "" },
+        { key: "LOGO_KONTAK", val: payload.kontakPuskesmas || "" }
+      ];
+      var lastRow = sheetCfg.getLastRow();
+      var existingKeys = {};
+      if (lastRow > 1) {
+        var existingData = sheetCfg.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (var i = 0; i < existingData.length; i++) {
+          existingKeys[existingData[i][0]] = i + 2;
+        }
+      }
+      configsToUpdate.forEach(function(item) {
+        if (!item.val) return;
+        if (existingKeys[item.key]) {
+          sheetCfg.getRange(existingKeys[item.key], 2).setValue(item.val);
+          sheetCfg.getRange(existingKeys[item.key], 5).setValue(new Date().toISOString());
+        } else {
+          sheetCfg.appendRow([item.key, item.val, "BRANDING", "Pengaturan Kop Surat", new Date().toISOString()]);
+        }
+      });
+      result = { status: "success", message: "Konfigurasi logo berhasil disimpan ke Spreadsheet secara global!" };
     }
     else {
       result = { status: "error", message: "Aksi POST tidak dikenali: " + action };
@@ -1058,7 +1131,8 @@ export class GasService {
         requests: storageService.getRequests(),
         droppings: storageService.getDroppings(),
         transactions: storageService.getTransactions(),
-        activityLogs: storageService.getActivityLogs()
+        activityLogs: storageService.getActivityLogs(),
+        logoConfig: storageService.getLogoConfig()
       };
 
       if (options?.includeUsers) {
@@ -1583,6 +1657,62 @@ export class GasService {
       return {
         success: false,
         message: e.message || 'Gagal koneksi ke Google Apps Script saat mengunggah logo.'
+      };
+    }
+  }
+
+  /**
+   * Menyimpan link logo secara global ke CONFIG_SISTEM Google Spreadsheet
+   * sehingga seluruh browser dan perangkat lain langsung membaca link logo yang sama saat sinkronisasi.
+   */
+  static async saveLogoLinksToSheets(
+    logoConfig: AppLogoConfig
+  ): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const url = cfg.gasDeploymentUrl || 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
+    if (!url) {
+      return { success: false, message: 'URL Web App Apps Script belum terhubung.' };
+    }
+
+    try {
+      const payload = {
+        action: 'saveLogoConfig',
+        logoJayaRaya: logoConfig.logoJayaRaya || '',
+        logoKesehatan: logoConfig.logoKesehatan || '',
+        namaPemprov: logoConfig.namaPemprov || '',
+        namaDinas: logoConfig.namaDinas || '',
+        namaPuskesmas: logoConfig.namaPuskesmas || '',
+        alamatPuskesmas: logoConfig.alamatPuskesmas || '',
+        kontakPuskesmas: logoConfig.kontakPuskesmas || ''
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const resJson = await response.json().catch(() => null);
+      if (resJson && resJson.status === 'success') {
+        return {
+          success: true,
+          message: 'Tautan logo resmi berhasil disimpan ke Google Spreadsheet (CONFIG_SISTEM) untuk semua browser!'
+        };
+      }
+      return {
+        success: true,
+        message: 'Tautan logo tersimpan lokal dan dijadwalkan sinkronisasi otomatis.'
+      };
+    } catch (e: any) {
+      console.warn('Sync logo links to sheets warning:', e);
+      return {
+        success: true,
+        message: 'Tautan logo tersimpan di aplikasi dan akan disinkronkan saat koneksi terhubung.'
       };
     }
   }

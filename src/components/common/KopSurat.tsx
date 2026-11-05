@@ -3,8 +3,8 @@ import { storageService } from '../../services/storageService';
 import { 
   DEFAULT_LOGO_JAYA_RAYA, 
   DEFAULT_LOGO_KESEHATAN, 
-  DEFAULT_DRIVE_ASSET_ID, 
-  getGoogleDriveThumbnailUrl 
+  EMBEDDED_LINK_LOGO_JAYA_RAYA,
+  EMBEDDED_LINK_LOGO_KESEHATAN
 } from '../../data/defaultLogos';
 
 export const KopSurat: React.FC = () => {
@@ -12,16 +12,13 @@ export const KopSurat: React.FC = () => {
   const [jayaRayaError, setJayaRayaError] = useState(false);
   const [kesehatanError, setKesehatanError] = useState(false);
 
-  // Default Drive URL for the official logos (ID: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5)
-  const defaultDriveLogo = getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400);
-
   const jayaRayaSrc = jayaRayaError 
     ? DEFAULT_LOGO_JAYA_RAYA 
-    : (logoConfig.logoJayaRaya || defaultDriveLogo || DEFAULT_LOGO_JAYA_RAYA);
+    : (logoConfig.logoJayaRaya || EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA);
 
   const kesehatanSrc = kesehatanError 
     ? DEFAULT_LOGO_KESEHATAN 
-    : (logoConfig.logoKesehatan || defaultDriveLogo || DEFAULT_LOGO_KESEHATAN);
+    : (logoConfig.logoKesehatan || EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
 
   return (
     <div id="kop-surat-puskesmas" className="border-b-2 border-teal-800 pb-3 mb-6">

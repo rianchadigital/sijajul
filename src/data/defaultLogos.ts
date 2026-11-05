@@ -57,6 +57,9 @@ export const DEFAULT_LOGO_KESEHATAN = `data:image/svg+xml;utf8,<svg xmlns="http:
  */
 export const DEFAULT_DRIVE_ASSET_ID = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
 
+export const EMBEDDED_LINK_LOGO_JAYA_RAYA = '/images/logo_jaya_raya.svg';
+export const EMBEDDED_LINK_LOGO_KESEHATAN = '/images/logo_kesehatan.svg';
+
 export const getGoogleDriveImageUrl = (fileId: string = DEFAULT_DRIVE_ASSET_ID): string => {
   if (!fileId) return '';
   return `https://lh3.googleusercontent.com/d/${fileId}`;

@@ -4,14 +4,21 @@ import {
   CheckCircle2, AlertCircle, Copy, Check, Download, Upload, RotateCcw, 
   FileCode2, MessageSquare, Send, Bot, 
   Sparkles, Image as ImageIcon, Trash2, Eye, ShieldCheck, 
-  Layers, Rocket, Server, Globe, ExternalLink
+  Layers, Rocket, Server, Globe, ExternalLink, Link2
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { gasService, generateGoogleAppsScriptCode } from '../services/gasService';
 import { WhatsappBotService } from '../services/whatsappBotService';
 import { User, GasConfig, WhatsappConfig, AppLogoConfig, BotChatMessage } from '../types';
 import { KopSurat } from '../components/common/KopSurat';
-import { DEFAULT_DRIVE_ASSET_ID, getGoogleDriveThumbnailUrl } from '../data/defaultLogos';
+import { 
+  DEFAULT_DRIVE_ASSET_ID, 
+  getGoogleDriveThumbnailUrl,
+  EMBEDDED_LINK_LOGO_JAYA_RAYA,
+  EMBEDDED_LINK_LOGO_KESEHATAN,
+  DEFAULT_LOGO_JAYA_RAYA,
+  DEFAULT_LOGO_KESEHATAN
+} from '../data/defaultLogos';
 
 interface SettingsViewProps {
   currentUser: User | null;
@@ -83,6 +90,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   const [copiedCode, setCopiedCode] = useState(false);
   const [waTestAlertSent, setWaTestAlertSent] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState<'JAYA_RAYA' | 'KESEHATAN' | null>(null);
+  const [isSavingGlobalLogo, setIsSavingGlobalLogo] = useState(false);
+  const [jayaRayaImgErr, setJayaRayaImgErr] = useState(false);
+  const [kesehatanImgErr, setKesehatanImgErr] = useState(false);
 
   // File Upload Refs
   const jayaRayaFileRef = useRef<HTMLInputElement>(null);
@@ -351,15 +361,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       const base64Url = event.target?.result as string;
 
       // Update preview lokal terlebih dahulu
+      let preview: AppLogoConfig;
       if (logoType === 'JAYA_RAYA') {
-        const preview = { ...logoConfig, logoJayaRaya: base64Url };
-        setLogoConfig(preview);
-        storageService.saveLogoConfig(preview);
+        preview = { ...logoConfig, logoJayaRaya: base64Url };
+        setJayaRayaImgErr(false);
       } else {
-        const preview = { ...logoConfig, logoKesehatan: base64Url };
-        setLogoConfig(preview);
-        storageService.saveLogoConfig(preview);
+        preview = { ...logoConfig, logoKesehatan: base64Url };
+        setKesehatanImgErr(false);
       }
+      setLogoConfig(preview);
+      storageService.saveLogoConfig(preview);
       onRefreshAll();
 
       setIsUploadingLogo(logoType);
@@ -374,23 +385,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
 
         if (res.success && res.url) {
           const finalUrl = res.url;
+          let updated: AppLogoConfig;
           if (logoType === 'JAYA_RAYA') {
-            const updated = { ...logoConfig, logoJayaRaya: finalUrl };
-            setLogoConfig(updated);
-            storageService.saveLogoConfig(updated);
+            updated = { ...logoConfig, logoJayaRaya: finalUrl };
           } else {
-            const updated = { ...logoConfig, logoKesehatan: finalUrl };
-            setLogoConfig(updated);
-            storageService.saveLogoConfig(updated);
+            updated = { ...logoConfig, logoKesehatan: finalUrl };
           }
+          setLogoConfig(updated);
+          storageService.saveLogoConfig(updated);
+          await gasService.saveLogoLinksToSheets(updated);
           onRefreshAll();
           setActionFeedback({
             message: `✅ Berhasil! Logo permanen tersimpan di Google Drive & disinkronkan ke Spreadsheet untuk seluruh browser!`,
             type: 'success'
           });
         } else {
+          // Tetap sinkronkan ke sheets
+          await gasService.saveLogoLinksToSheets(preview);
           setActionFeedback({
-            message: `Logo tersimpan di browser lokal. (Google Drive: ${res.message})`,
+            message: `Logo tersimpan di browser lokal & disinkronkan ke Spreadsheet. (Catatan Google Drive: ${res.message || 'tersimpan'})`,
             type: 'info'
           });
         }
@@ -407,18 +420,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     reader.readAsDataURL(file);
   };
 
-  const handleSaveLogoTexts = (e: React.FormEvent) => {
+  const handleSaveLogoTexts = async (e: React.FormEvent) => {
     e.preventDefault();
     storageService.saveLogoConfig(logoConfig);
     onRefreshAll();
+    if (gasConfig.webAppUrl) {
+      gasService.saveLogoLinksToSheets(logoConfig);
+    }
     setActionFeedback({
-      message: 'Pengaturan teks Kop Surat & Logo resmi berhasil disimpan!',
+      message: '✅ Pengaturan teks Kop Surat & identitas resmi berhasil disimpan!',
       type: 'success'
     });
     setTimeout(() => setActionFeedback(null), 4000);
   };
 
-  const handleApplyDriveLogo = (customAssetId?: string) => {
+  const handleApplyDriveLogo = async (customAssetId?: string) => {
     const assetId = (customAssetId || driveAssetInput || DEFAULT_DRIVE_ASSET_ID).trim();
     const driveThumbUrl = getGoogleDriveThumbnailUrl(assetId, 400);
     const updated: AppLogoConfig = {
@@ -431,20 +447,88 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     };
     setLogoConfig(updated);
     storageService.saveLogoConfig(updated);
+    if (gasConfig.webAppUrl) {
+      await gasService.saveLogoLinksToSheets(updated);
+    }
     onRefreshAll();
     setActionFeedback({
-      message: `Logo resmi dari Google Drive (Asset: ${assetId}) berhasil dipasang pada Kop Surat!`,
+      message: `✅ Logo resmi dari Google Drive (Asset: ${assetId}) berhasil dipasang pada Kop Surat & disinkronkan ke Spreadsheet!`,
       type: 'success'
     });
     setTimeout(() => setActionFeedback(null), 4000);
   };
 
-  const handleResetLogosToDefault = () => {
-    const reseted = storageService.resetLogoConfig();
-    setLogoConfig(reseted);
+  const handleSetPresetLogo = async (type: 'JAYA_RAYA' | 'KESEHATAN', preset: 'EMBEDDED' | 'DRIVE') => {
+    let newUrl = '';
+    if (type === 'JAYA_RAYA') {
+      newUrl = preset === 'EMBEDDED' 
+        ? EMBEDDED_LINK_LOGO_JAYA_RAYA 
+        : getGoogleDriveThumbnailUrl(driveAssetInput || DEFAULT_DRIVE_ASSET_ID, 400);
+      const updated: AppLogoConfig = { ...logoConfig, logoJayaRaya: newUrl };
+      setLogoConfig(updated);
+      setJayaRayaImgErr(false);
+      storageService.saveLogoConfig(updated);
+      if (gasConfig.webAppUrl) gasService.saveLogoLinksToSheets(updated);
+    } else {
+      newUrl = preset === 'EMBEDDED' 
+        ? EMBEDDED_LINK_LOGO_KESEHATAN 
+        : getGoogleDriveThumbnailUrl(driveAssetInput || DEFAULT_DRIVE_ASSET_ID, 400);
+      const updated: AppLogoConfig = { ...logoConfig, logoKesehatan: newUrl };
+      setLogoConfig(updated);
+      setKesehatanImgErr(false);
+      storageService.saveLogoConfig(updated);
+      if (gasConfig.webAppUrl) gasService.saveLogoLinksToSheets(updated);
+    }
     onRefreshAll();
     setActionFeedback({
-      message: 'Logo telah dikembalikan ke logo resmi bawaan DKI Jakarta & Bakti Husada.',
+      message: `✅ Link ${type === 'JAYA_RAYA' ? 'Logo Jaya Raya' : 'Logo Kesehatan'} berhasil disematkan (${preset === 'EMBEDDED' ? 'Logo Bawaan Global' : 'Google Drive'})!`,
+      type: 'success'
+    });
+    setTimeout(() => setActionFeedback(null), 4000);
+  };
+
+  const handleSaveGlobalLogos = async () => {
+    setIsSavingGlobalLogo(true);
+    try {
+      storageService.saveLogoConfig(logoConfig);
+      onRefreshAll();
+      let syncMsg = '';
+      if (gasConfig.webAppUrl) {
+        const res = await gasService.saveLogoLinksToSheets(logoConfig);
+        if (res.success) {
+          syncMsg = ' & tersinkronisasi ke Google Spreadsheet (tabel CONFIG_SISTEM)! Semua browser dan perangkat lain kini otomatis memuat logo ini.';
+        } else {
+          syncMsg = ` (Tersimpan lokal; Catatan Sheets: ${res.message || 'akan disinkron saat konek'})`;
+        }
+      } else {
+        syncMsg = ' di penyimpanan aplikasi.';
+      }
+      setActionFeedback({
+        message: `✅ Berhasil! Pengaturan link logo permanen tersimpan${syncMsg}`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        message: `Pengaturan logo tersimpan lokal: ${err.message || ''}`,
+        type: 'info'
+      });
+    } finally {
+      setIsSavingGlobalLogo(false);
+      setTimeout(() => setActionFeedback(null), 6000);
+    }
+  };
+
+  const handleResetLogosToDefault = async () => {
+    const reseted = storageService.resetLogoConfig();
+    setLogoConfig(reseted);
+    setJayaRayaImgErr(false);
+    setKesehatanImgErr(false);
+    if (gasConfig.webAppUrl) {
+      await gasService.saveLogoLinksToSheets(reseted);
+    }
+    onRefreshAll();
+    setActionFeedback({
+      message: '✅ Logo telah dikembalikan ke logo resmi bawaan DKI Jakarta & Bakti Husada serta disinkronkan ke Spreadsheet!',
       type: 'info'
     });
     setTimeout(() => setActionFeedback(null), 4000);
@@ -1142,7 +1226,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
               </div>
             </div>
 
-            {/* Two Logo Upload Cards */}
+            {/* Global Persistence Information Box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-blue-900">
+              <div className="flex items-start gap-3">
+                <Globe className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Tips Tampil Global di Semua Browser:</span>
+                  <p className="text-blue-700 mt-0.5">
+                    Sematkan <strong>Link URL langsung</strong> (seperti Link Bawaan Global <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[11px]">/images/logo_...svg</code> atau link gambar publik). Setelah mengatur, klik tombol <strong>"Simpan Logo Global & Sinkronkan ke Spreadsheet"</strong> agar link tersimpan di Google Spreadsheet (<code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[11px]">CONFIG_SISTEM</code>) dan otomatis tampil di semua browser, HP, PC, dan jendela Incognito tanpa login Google Drive.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveGlobalLogos}
+                disabled={isSavingGlobalLogo}
+                className="w-full sm:w-auto px-4 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors whitespace-nowrap cursor-pointer flex-shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSavingGlobalLogo ? 'animate-spin' : ''}`} />
+                {isSavingGlobalLogo ? 'Menyinkronkan...' : 'Simpan Logo Global'}
+              </button>
+            </div>
+
+            {/* Two Logo Configuration Cards with Direct URL & Presets */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Card 1: Logo Jaya Raya (DKI Jakarta) */}
               <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4">
@@ -1151,49 +1257,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                     <ShieldCheck className="w-4 h-4 text-teal-700" />
                     1. Logo Jaya Raya (Prov. DKI Jakarta)
                   </div>
-                  <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full font-bold">
                     Kiri Kop Surat
                   </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-200">
-                  <div className="w-24 h-24 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner">
-                    {logoConfig.logoJayaRaya ? (
+                {/* Preview Box & Status */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner relative">
                       <img 
-                        src={logoConfig.logoJayaRaya} 
+                        src={(!jayaRayaImgErr && logoConfig.logoJayaRaya) ? logoConfig.logoJayaRaya : (EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA)} 
                         alt="Logo Jaya Raya" 
                         className="w-full h-full object-contain"
                         referrerPolicy="no-referrer"
+                        onError={() => setJayaRayaImgErr(true)}
+                        onLoad={() => setJayaRayaImgErr(false)}
                       />
-                    ) : (
-                      <div className="text-center text-xs text-slate-400">Belum ada logo</div>
-                    )}
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-700">Status Gambar:</span>
+                        {jayaRayaImgErr ? (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-semibold">
+                            ⚠️ Gagal muat, pakai cadangan resmi
+                          </span>
+                        ) : logoConfig.logoJayaRaya === EMBEDDED_LINK_LOGO_JAYA_RAYA || !logoConfig.logoJayaRaya ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Link Bawaan Global (Aktif)
+                          </span>
+                        ) : logoConfig.logoJayaRaya.includes('drive.google.com') ? (
+                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold">
+                            📁 Link Google Drive
+                          </span>
+                        ) : logoConfig.logoJayaRaya.startsWith('data:') ? (
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-semibold">
+                            💾 File Upload Gambar
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-semibold">
+                            🌐 Custom Link URL
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 line-clamp-2 break-all font-mono">
+                        {logoConfig.logoJayaRaya || EMBEDDED_LINK_LOGO_JAYA_RAYA}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-2 text-center sm:text-left flex-1">
-                    <p className="text-xs text-slate-600">
-                      Format: PNG, JPG, SVG, WebP. Disarankan gambar dengan latar belakang transparan / resolusi tajam.
-                    </p>
-
-                    <input 
-                      type="file" 
-                      ref={jayaRayaFileRef}
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'JAYA_RAYA')}
-                      className="hidden" 
-                    />
-
-                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                      <button
-                        type="button"
-                        disabled={isUploadingLogo === 'JAYA_RAYA'}
-                        onClick={() => jayaRayaFileRef.current?.click()}
-                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                      >
-                        <Upload className={`w-3.5 h-3.5 ${isUploadingLogo === 'JAYA_RAYA' ? 'animate-bounce' : ''}`} />
-                        {isUploadingLogo === 'JAYA_RAYA' ? 'Mengunggah ke Drive...' : 'Upload & Simpan ke Drive'}
-                      </button>
-
+                  {/* Direct Link Input */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <label className="block text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-teal-700" />
+                      Sematkan Link Gambar Langsung (URL Global):
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={logoConfig.logoJayaRaya}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setLogoConfig(prev => ({ ...prev, logoJayaRaya: val }));
+                          setJayaRayaImgErr(false);
+                        }}
+                        placeholder={EMBEDDED_LINK_LOGO_JAYA_RAYA}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      />
                       {logoConfig.logoJayaRaya && (
                         <button
                           type="button"
@@ -1203,13 +1334,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                             storageService.saveLogoConfig(updated);
                             onRefreshAll();
                           }}
-                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1"
+                          title="Kosongkan link"
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Hapus
+                          ✕
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Quick Preset & Upload Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetLogo('JAYA_RAYA', 'EMBEDDED')}
+                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3 text-teal-700" />
+                      Sematkan Link Bawaan
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetLogo('JAYA_RAYA', 'DRIVE')}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Cloud className="w-3 h-3 text-emerald-700" />
+                      Link Drive Asset
+                    </button>
+
+                    <input 
+                      type="file" 
+                      ref={jayaRayaFileRef}
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, 'JAYA_RAYA')}
+                      className="hidden" 
+                    />
+
+                    <button
+                      type="button"
+                      disabled={isUploadingLogo === 'JAYA_RAYA'}
+                      onClick={() => jayaRayaFileRef.current?.click()}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Upload className={`w-3 h-3 ${isUploadingLogo === 'JAYA_RAYA' ? 'animate-bounce' : ''}`} />
+                      {isUploadingLogo === 'JAYA_RAYA' ? 'Mengunggah...' : 'Upload File'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1221,49 +1391,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                     <Layers className="w-4 h-4 text-emerald-700" />
                     2. Logo Kesehatan / Puskesmas
                   </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
                     Kanan Kop Surat
                   </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-slate-200">
-                  <div className="w-24 h-24 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner">
-                    {logoConfig.logoKesehatan ? (
+                {/* Preview Box & Status */}
+                <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner relative">
                       <img 
-                        src={logoConfig.logoKesehatan} 
+                        src={(!kesehatanImgErr && logoConfig.logoKesehatan) ? logoConfig.logoKesehatan : (EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN)} 
                         alt="Logo Kesehatan" 
                         className="w-full h-full object-contain"
                         referrerPolicy="no-referrer"
+                        onError={() => setKesehatanImgErr(true)}
+                        onLoad={() => setKesehatanImgErr(false)}
                       />
-                    ) : (
-                      <div className="text-center text-xs text-slate-400">Belum ada logo</div>
-                    )}
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-700">Status Gambar:</span>
+                        {kesehatanImgErr ? (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-semibold">
+                            ⚠️ Gagal muat, pakai cadangan resmi
+                          </span>
+                        ) : logoConfig.logoKesehatan === EMBEDDED_LINK_LOGO_KESEHATAN || !logoConfig.logoKesehatan ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Link Bawaan Global (Aktif)
+                          </span>
+                        ) : logoConfig.logoKesehatan.includes('drive.google.com') ? (
+                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold">
+                            📁 Link Google Drive
+                          </span>
+                        ) : logoConfig.logoKesehatan.startsWith('data:') ? (
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-semibold">
+                            💾 File Upload Gambar
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-semibold">
+                            🌐 Custom Link URL
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 line-clamp-2 break-all font-mono">
+                        {logoConfig.logoKesehatan || EMBEDDED_LINK_LOGO_KESEHATAN}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-2 text-center sm:text-left flex-1">
-                    <p className="text-xs text-slate-600">
-                      Logo Bakti Husada Kemenkes RI, Dinas Kesehatan DKI, atau lambang Puskesmas Kepulauan Seribu Selatan.
-                    </p>
-
-                    <input 
-                      type="file" 
-                      ref={kesehatanFileRef}
-                      accept="image/*"
-                      onChange={(e) => handleFileUpload(e, 'KESEHATAN')}
-                      className="hidden" 
-                    />
-
-                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                      <button
-                        type="button"
-                        disabled={isUploadingLogo === 'KESEHATAN'}
-                        onClick={() => kesehatanFileRef.current?.click()}
-                        className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                      >
-                        <Upload className={`w-3.5 h-3.5 ${isUploadingLogo === 'KESEHATAN' ? 'animate-bounce' : ''}`} />
-                        {isUploadingLogo === 'KESEHATAN' ? 'Mengunggah ke Drive...' : 'Upload & Simpan ke Drive'}
-                      </button>
-
+                  {/* Direct Link Input */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <label className="block text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-emerald-700" />
+                      Sematkan Link Gambar Langsung (URL Global):
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={logoConfig.logoKesehatan}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setLogoConfig(prev => ({ ...prev, logoKesehatan: val }));
+                          setKesehatanImgErr(false);
+                        }}
+                        placeholder={EMBEDDED_LINK_LOGO_KESEHATAN}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      />
                       {logoConfig.logoKesehatan && (
                         <button
                           type="button"
@@ -1273,15 +1468,79 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                             storageService.saveLogoConfig(updated);
                             onRefreshAll();
                           }}
-                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1"
+                          title="Kosongkan link"
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Hapus
+                          ✕
                         </button>
                       )}
                     </div>
                   </div>
+
+                  {/* Quick Preset & Upload Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetLogo('KESEHATAN', 'EMBEDDED')}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3 text-emerald-700" />
+                      Sematkan Link Bawaan
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetLogo('KESEHATAN', 'DRIVE')}
+                      className="px-2.5 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Cloud className="w-3 h-3 text-teal-700" />
+                      Link Drive Asset
+                    </button>
+
+                    <input 
+                      type="file" 
+                      ref={kesehatanFileRef}
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, 'KESEHATAN')}
+                      className="hidden" 
+                    />
+
+                    <button
+                      type="button"
+                      disabled={isUploadingLogo === 'KESEHATAN'}
+                      onClick={() => kesehatanFileRef.current?.click()}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Upload className={`w-3 h-3 ${isUploadingLogo === 'KESEHATAN' ? 'animate-bounce' : ''}`} />
+                      {isUploadingLogo === 'KESEHATAN' ? 'Mengunggah...' : 'Upload File'}
+                    </button>
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Prominent Global Save Button */}
+            <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-slate-50 border border-teal-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-teal-700" />
+                  Simpan Pengaturan Logo ke Spreadsheet (Global)
+                </h4>
+                <p className="text-xs text-slate-600">
+                  Klik tombol di samping untuk menyimpan tautan logo secara permanen ke Google Spreadsheet sehingga semua browser lain otomatis menampilkan logo yang sama.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleSaveGlobalLogos}
+                  disabled={isSavingGlobalLogo}
+                  className="flex-1 sm:flex-none px-5 py-2.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSavingGlobalLogo ? 'animate-spin' : ''}`} />
+                  {isSavingGlobalLogo ? 'Menyinkronkan ke Spreadsheet...' : 'Simpan Logo Global & Sinkronkan'}
+                </button>
               </div>
             </div>
 

@@ -16,6 +16,8 @@ import {
   DEFAULT_LOGO_JAYA_RAYA, 
   DEFAULT_LOGO_KESEHATAN,
   DEFAULT_DRIVE_ASSET_ID,
+  EMBEDDED_LINK_LOGO_JAYA_RAYA,
+  EMBEDDED_LINK_LOGO_KESEHATAN,
   getGoogleDriveThumbnailUrl
 } from '../data/defaultLogos';
 
@@ -37,11 +39,11 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
 };
 
 export const DEFAULT_LOGO_CONFIG: AppLogoConfig = {
-  logoJayaRaya: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400),
-  logoKesehatan: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400),
+  logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA,
+  logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN,
   driveAssetId: DEFAULT_DRIVE_ASSET_ID,
   driveAssetUrl: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 800),
-  useDriveAsset: true,
+  useDriveAsset: false,
   namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
   namaDinas: 'DINAS KESEHATAN',
   namaPuskesmas: 'PUSKESMAS KECAMATAN KEPULAUAN SERIBU SELATAN',
@@ -2226,18 +2228,44 @@ class StorageService {
   }
 
   getLogoConfig(): AppLogoConfig {
-    return this.getItem<AppLogoConfig>(STORAGE_KEYS.LOGO_CONFIG, DEFAULT_LOGO_CONFIG);
+    const cfg = this.getItem<AppLogoConfig>(STORAGE_KEYS.LOGO_CONFIG, DEFAULT_LOGO_CONFIG);
+    let modified = false;
+    // Otomatis ganti jika link sebelumnya adalah thumbnail drive yang terblokir login
+    const isRestrictedDriveUrl = (url?: string) => {
+      if (!url) return true;
+      return url.includes('drive.google.com/thumbnail?id=1sx65Ff') || url.includes('lh3.googleusercontent.com/d/1sx65Ff');
+    };
+
+    if (!cfg.logoJayaRaya || isRestrictedDriveUrl(cfg.logoJayaRaya)) {
+      cfg.logoJayaRaya = EMBEDDED_LINK_LOGO_JAYA_RAYA;
+      modified = true;
+    }
+    if (!cfg.logoKesehatan || isRestrictedDriveUrl(cfg.logoKesehatan)) {
+      cfg.logoKesehatan = EMBEDDED_LINK_LOGO_KESEHATAN;
+      modified = true;
+    }
+    if (modified) {
+      this.setItem(STORAGE_KEYS.LOGO_CONFIG, cfg);
+    }
+    return cfg;
   }
 
   saveLogoConfig(config: AppLogoConfig): void {
-    this.setItem(STORAGE_KEYS.LOGO_CONFIG, {
+    const updated = {
       ...config,
       updatedAt: new Date().toISOString()
-    });
+    };
+    this.setItem(STORAGE_KEYS.LOGO_CONFIG, updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'logoConfigUpdated', config: updated } }));
+    }
   }
 
   resetLogoConfig(): AppLogoConfig {
     this.setItem(STORAGE_KEYS.LOGO_CONFIG, DEFAULT_LOGO_CONFIG);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'logoConfigReset' } }));
+    }
     return DEFAULT_LOGO_CONFIG;
   }
 
@@ -2608,11 +2636,26 @@ class StorageService {
       sheetData.config.forEach((row: any) => {
         const key = String(row['Kunci Pengaturan (Key)'] || row['key'] || '').trim();
         const val = String(row['Nilai Pengaturan (Value)'] || row['value'] || '').trim();
-        if (key === 'LOGO_JAYA_RAYA' && val && val.startsWith('http')) {
+        if (key === 'LOGO_JAYA_RAYA' && val) {
           updatedLogos.logoJayaRaya = val;
           hasLogoChanges = true;
-        } else if (key === 'LOGO_KESEHATAN' && val && val.startsWith('http')) {
+        } else if (key === 'LOGO_KESEHATAN' && val) {
           updatedLogos.logoKesehatan = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_NAMA_PEMPROV' && val) {
+          updatedLogos.namaPemprov = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_NAMA_DINAS' && val) {
+          updatedLogos.namaDinas = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_NAMA_PUSKESMAS' && val) {
+          updatedLogos.namaPuskesmas = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_ALAMAT' && val) {
+          updatedLogos.alamatPuskesmas = val;
+          hasLogoChanges = true;
+        } else if (key === 'LOGO_KONTAK' && val) {
+          updatedLogos.kontakPuskesmas = val;
           hasLogoChanges = true;
         }
       });
@@ -2647,7 +2690,7 @@ class StorageService {
   checkAndAutoPurgeDummy(): void {
     try {
       if (typeof window === 'undefined') return;
-      const flag = localStorage.getItem('sijajul_purge_demo_transactions_and_requests_v20');
+      const flag = localStorage.getItem('sijajul_purge_demo_transactions_and_requests_v21');
       if (!flag) {
         // Bersihkan seluruh data permintaan, logistik, transaksi mutasi, BAST, SBBK demo dari lokal browser
         this.setItem(STORAGE_KEYS.REQUESTS, []);
@@ -2672,16 +2715,14 @@ class StorageService {
         });
         this.saveItems(items);
 
-        // Pasang konfigurasi logo dengan asset Google Drive yang diberikan pengguna
+        // Pasang konfigurasi logo resmi bawaan yang tersemat secara global di semua browser
         const currentLogo = this.getLogoConfig();
-        const driveLogoUrl = getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 400);
         this.saveLogoConfig({
           ...currentLogo,
+          logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA,
+          logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN,
           driveAssetId: DEFAULT_DRIVE_ASSET_ID,
-          driveAssetUrl: driveLogoUrl,
-          logoJayaRaya: driveLogoUrl,
-          logoKesehatan: driveLogoUrl,
-          useDriveAsset: true
+          useDriveAsset: false
         });
 
         // Pastikan konfigurasi Google Spreadsheet & GAS terpasang aktif
@@ -2694,7 +2735,7 @@ class StorageService {
         cfg.isConnected = true;
         this.saveSheetsConfig(cfg);
 
-        localStorage.setItem('sijajul_purge_demo_transactions_and_requests_v20', 'true');
+        localStorage.setItem('sijajul_purge_demo_transactions_and_requests_v21', 'true');
         window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
       }
     } catch (e) {

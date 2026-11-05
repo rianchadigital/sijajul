@@ -541,10 +541,10 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
             className="py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 font-semibold text-slate-700 w-full sm:w-auto"
           >
             <option value="ALL">Semua Kategori ({items.length})</option>
-            {categories.map(c => {
+            {categories.map((c, idx) => {
               const count = items.filter(i => i.kategoriId === c.id || i.kategoriNama?.toLowerCase() === c.nama.toLowerCase()).length;
               return (
-                <option key={c.id} value={c.id}>{c.nama} ({count})</option>
+                <option key={`${c.id}-${idx}`} value={c.id}>{c.nama} ({count})</option>
               );
             })}
           </select>
@@ -578,7 +578,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 </tr>
               ) : (
                 filteredItems.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={`${item.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="px-4 py-3 font-mono font-bold text-teal-900">{item.kodeBarang}</td>
                     <td className="px-4 py-3">

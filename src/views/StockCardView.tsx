@@ -215,8 +215,8 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
                   </td>
                 </tr>
               ) : (
-                transactions.map((trx) => (
-                  <tr key={trx.id} className="hover:bg-slate-50/80 transition-colors">
+                transactions.map((trx, idx) => (
+                  <tr key={`${trx.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">
                       {trx.tanggal}
                     </td>

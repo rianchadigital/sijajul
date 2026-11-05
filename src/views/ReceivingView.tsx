@@ -281,8 +281,8 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {confirmingDropping.items.map((itm) => (
-                        <tr key={itm.barangId}>
+                      {confirmingDropping.items.map((itm, idx) => (
+                        <tr key={`${itm.barangId}-${idx}`}>
                           <td className="p-3">
                             <div className="font-bold text-slate-800">{itm.namaBarang}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{itm.kodeBarang}</div>

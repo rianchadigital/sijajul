@@ -715,28 +715,52 @@ class StorageService {
   // Items
   getItems(): Item[] {
     const rawItems = this.getItem<Item[]>(STORAGE_KEYS.ITEMS, INITIAL_ITEMS);
-    const items = (rawItems || []).filter(i => {
+    const seenIds = new Set<string>();
+    const uniqueItems: Item[] = [];
+    let hadDuplicatesOrFiltered = false;
+
+    for (const i of (rawItems || [])) {
+      if (!i || !i.id) continue;
       const n = (i.namaBarang || '').toLowerCase();
       const k = (i.kodeBarang || '').toLowerCase();
-      return !n.includes('paracetamol') && !k.includes('pct');
-    });
-    return items;
+      if (n.includes('paracetamol') || k.includes('pct')) {
+        hadDuplicatesOrFiltered = true;
+        continue;
+      }
+
+      if (!seenIds.has(i.id)) {
+        seenIds.add(i.id);
+        uniqueItems.push(i);
+      } else {
+        hadDuplicatesOrFiltered = true;
+      }
+    }
+
+    if (hadDuplicatesOrFiltered && rawItems && rawItems.length !== uniqueItems.length) {
+      this.setItem(STORAGE_KEYS.ITEMS, uniqueItems);
+    }
+
+    return uniqueItems;
   }
 
   saveItems(items: Item[]): void {
-    this.setItem(STORAGE_KEYS.ITEMS, items);
+    const seenIds = new Set<string>();
+    const uniqueItems: Item[] = [];
+    for (const i of (items || [])) {
+      if (!i || !i.id) continue;
+      if (!seenIds.has(i.id)) {
+        seenIds.add(i.id);
+        uniqueItems.push(i);
+      }
+    }
+    this.setItem(STORAGE_KEYS.ITEMS, uniqueItems);
   }
 
   saveItem(item: Item, initialStockBigWarehouse = 0): void {
-    const items = this.getItems();
-    const idx = items.findIndex(i => i.id === item.id);
-    const isNew = idx < 0;
-    if (idx >= 0) {
-      items[idx] = item;
-    } else {
-      items.push(item);
-    }
-    this.saveItems(items);
+    const currentItems = this.getItems().filter(i => i.id !== item.id);
+    const isNew = true; // effectively appending or updating
+    currentItems.push(item);
+    this.saveItems(currentItems);
 
     // Sinkronkan atau buat saldo stok awal untuk gudang
     const stocks = this.getStocks();
@@ -996,14 +1020,44 @@ class StorageService {
   // Stocks
   getStocks(): WarehouseStock[] {
     const rawStocks = this.getItem<WarehouseStock[]>(STORAGE_KEYS.STOCKS, generateInitialStocks());
-    const stocks = (rawStocks || []).filter(s => {
-      return s.barangId !== 'ITM-001' && !s.barangId?.toLowerCase().includes('pct');
-    });
-    return stocks;
+    const seenKeys = new Set<string>();
+    const uniqueStocks: WarehouseStock[] = [];
+    let hadDuplicatesOrFiltered = false;
+
+    for (const s of (rawStocks || [])) {
+      if (!s || !s.barangId || !s.gudangId) continue;
+      if (s.barangId === 'ITM-001' || s.barangId.toLowerCase().includes('pct')) {
+        hadDuplicatesOrFiltered = true;
+        continue;
+      }
+      const key = `${s.gudangId}-${s.barangId}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueStocks.push(s);
+      } else {
+        hadDuplicatesOrFiltered = true;
+      }
+    }
+
+    if (hadDuplicatesOrFiltered && rawStocks && rawStocks.length !== uniqueStocks.length) {
+      this.setItem(STORAGE_KEYS.STOCKS, uniqueStocks);
+    }
+
+    return uniqueStocks;
   }
 
   saveStocks(stocks: WarehouseStock[]): void {
-    this.setItem(STORAGE_KEYS.STOCKS, stocks);
+    const seenKeys = new Set<string>();
+    const uniqueStocks: WarehouseStock[] = [];
+    for (const s of (stocks || [])) {
+      if (!s || !s.barangId || !s.gudangId) continue;
+      const key = `${s.gudangId}-${s.barangId}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueStocks.push(s);
+      }
+    }
+    this.setItem(STORAGE_KEYS.STOCKS, uniqueStocks);
   }
 
   getStockByWarehouseAndItem(warehouseId: string, itemId: string): WarehouseStock {
@@ -2483,10 +2537,19 @@ class StorageService {
         };
       }).filter((i: Item) => !!i.namaBarang);
 
-      if (itemsList.length > 0) {
+      const seenItemIds = new Set<string>();
+      const uniqueItemsList: Item[] = [];
+      for (const itm of itemsList) {
+        if (!seenItemIds.has(itm.id)) {
+          seenItemIds.add(itm.id);
+          uniqueItemsList.push(itm);
+        }
+      }
+
+      if (uniqueItemsList.length > 0) {
         this.saveCategories(existingCategories);
-        this.saveItems(itemsList);
-        counts.items = itemsList.length;
+        this.saveItems(uniqueItemsList);
+        counts.items = uniqueItemsList.length;
       }
     }
 
@@ -2513,9 +2576,19 @@ class StorageService {
         };
       }).filter((s: WarehouseStock) => !!s.barangId);
 
-      if (stocksList.length > 0) {
-        this.saveStocks(stocksList);
-        counts.stocks = stocksList.length;
+      const seenStockKeys = new Set<string>();
+      const uniqueStocksList: WarehouseStock[] = [];
+      for (const stk of stocksList) {
+        const key = `${stk.gudangId}-${stk.barangId}`;
+        if (!seenStockKeys.has(key)) {
+          seenStockKeys.add(key);
+          uniqueStocksList.push(stk);
+        }
+      }
+
+      if (uniqueStocksList.length > 0) {
+        this.saveStocks(uniqueStocksList);
+        counts.stocks = uniqueStocksList.length;
       }
     }
 
@@ -2737,6 +2810,16 @@ class StorageService {
 
         localStorage.setItem('sijajul_purge_demo_transactions_and_requests_v21', 'true');
         window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+      }
+
+      // Pastikan deduplikasi data barang dan stok berjalan otomatis untuk semua browser
+      const dedupFlag = localStorage.getItem('sijajul_dedup_items_v22');
+      if (!dedupFlag) {
+        const cleanItems = this.getItems();
+        this.saveItems(cleanItems);
+        const cleanStocks = this.getStocks();
+        this.saveStocks(cleanStocks);
+        localStorage.setItem('sijajul_dedup_items_v22', 'true');
       }
     } catch (e) {
       console.warn('Auto dummy purge check warning:', e);

@@ -244,7 +244,7 @@ export const MasterCategoryView: React.FC<MasterCategoryViewProps> = ({ currentU
                 filteredCategories.map((cat, idx) => {
                   const itemCount = getItemCountForCategory(cat);
                   return (
-                    <tr key={cat.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`${cat.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
                       <td className="px-4 py-3 font-mono font-bold text-teal-900">{cat.kode}</td>
                       <td className="px-4 py-3 font-bold text-slate-800">

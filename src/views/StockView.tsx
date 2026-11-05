@@ -437,7 +437,7 @@ export const StockView: React.FC<StockViewProps> = ({ onNavigate, currentUser, o
                 </tr>
               ) : (
                 filteredRecords.map((record, index) => (
-                  <tr key={`${record.warehouse.id}-${record.item.id}`} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={`${record.warehouse.id}-${record.item.id}-${index}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-slate-800">{record.item.namaBarang}</div>

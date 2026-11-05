@@ -384,8 +384,8 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                   </td>
                 </tr>
               ) : (
-                filteredRequests.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
+                filteredRequests.map((req, idx) => (
+                  <tr key={`${req.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 font-mono font-bold text-teal-800">
                       {req.nomorPermintaan}
                     </td>

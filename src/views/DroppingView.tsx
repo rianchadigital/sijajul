@@ -255,8 +255,8 @@ export const DroppingView: React.FC<DroppingViewProps> = ({ onNavigate, currentU
                   </td>
                 </tr>
               ) : (
-                filteredDroppings.map((drp) => (
-                  <tr key={drp.id} className="hover:bg-slate-50/80 transition-colors">
+                filteredDroppings.map((drp, idx) => (
+                  <tr key={`${drp.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 font-bold font-mono text-teal-900">
                       {drp.nomorDropping}
                     </td>

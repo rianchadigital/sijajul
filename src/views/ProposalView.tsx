@@ -654,8 +654,8 @@ export const ProposalView: React.FC<ProposalViewProps> = ({ currentUser, onRefre
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredProposals.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                {filteredProposals.map((p, idx) => (
+                  <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4">
                       <div className="font-mono font-bold text-teal-900">{p.nomorUsulan}</div>
                       <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">

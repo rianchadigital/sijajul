@@ -548,7 +548,7 @@ export const StockOpnameView: React.FC<StockOpnameViewProps> = ({ currentUser, o
                   const selisih = saldoFisik - saldoSistem;
 
                   return (
-                  <tr key={itm.id} className={`hover:bg-slate-50/80 transition-colors ${selisih !== 0 ? 'bg-amber-50/40' : ''}`}>
+                  <tr key={`${itm.id}-${idx}`} className={`hover:bg-slate-50/80 transition-colors ${selisih !== 0 ? 'bg-amber-50/40' : ''}`}>
                     <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-slate-800">{itm.namaBarang}</div>

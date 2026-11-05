@@ -605,13 +605,13 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(selectedReq.items || []).map((itm) => {
+                        {(selectedReq.items || []).map((itm, idx) => {
                           const stock = getGudangBesarStock(itm.barangId, selectedReq.gudangAsalId);
                           const isInsufficient = stock < itm.jumlahDiminta;
                           const currentApprovedVal = approvedItems[itm.barangId] ?? itm.jumlahDiminta;
 
                           return (
-                            <tr key={itm.barangId} className={isInsufficient ? 'bg-amber-50/40' : ''}>
+                            <tr key={`${itm.barangId}-${idx}`} className={isInsufficient ? 'bg-amber-50/40' : ''}>
                               <td className="p-3">
                                 <div className="font-bold text-slate-800">{itm.namaBarang}</div>
                                 <div className="text-[10px] text-slate-400 font-mono">{itm.kodeBarang}</div>

@@ -162,8 +162,8 @@ export const MasterWarehouseView: React.FC<MasterWarehouseViewProps> = ({ curren
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((w) => (
-          <div key={w.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:border-teal-400 transition-all">
+        {filtered.map((w, idx) => (
+          <div key={`${w.id}-${idx}`} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between hover:border-teal-400 transition-all">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${

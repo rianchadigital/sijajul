@@ -190,8 +190,8 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
                   </td>
                 </tr>
               ) : (
-                mutationHistory.map((trx) => (
-                  <tr key={trx.id} className="hover:bg-slate-50/80 transition-colors">
+                mutationHistory.map((trx, idx) => (
+                  <tr key={`${trx.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3 text-slate-600">{trx.tanggal}</td>
                     <td className="px-4 py-3 font-mono font-bold text-slate-800">{trx.nomorTransaksi}</td>
                     <td className="px-4 py-3 font-medium text-slate-800">{trx.gudangNama}</td>

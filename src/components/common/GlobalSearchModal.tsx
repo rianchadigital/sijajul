@@ -98,9 +98,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 <Package className="w-3.5 h-3.5 text-teal-600" /> Barang Persediaan ({filteredItems.length})
               </div>
               <div className="space-y-1">
-                {filteredItems.map(item => (
+                {filteredItems.map((item, idx) => (
                   <button
-                    key={item.id}
+                    key={`${item.id}-${idx}`}
                     onClick={() => { onNavigate('stok'); onClose(); }}
                     className="w-full text-left px-3 py-2 rounded-lg hover:bg-teal-50 flex items-center justify-between group transition-colors"
                   >

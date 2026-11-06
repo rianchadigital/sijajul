@@ -4,6 +4,7 @@ import {
   Download, FileCheck2, AlertCircle, MapPin 
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { Dropping, User, Warehouse } from '../types';
 import { StatusBadge } from '../components/common/Badge';
 import { PdfService } from '../services/pdfService';
@@ -63,10 +64,11 @@ export const ReceivingView: React.FC<ReceivingViewProps> = ({ onNavigate, curren
       }));
 
       storageService.confirmReceiving(confirmingDropping.id, receiverNotes, itemsPayload);
+      gasService.pushToSheets().catch(err => console.warn('Push receiving ke Sheets:', err));
       setConfirmingDropping(null);
       loadData();
       onRefreshStats();
-      showToast('Penerimaan barang berhasil dikonfirmasi! Stok Sub Gudang telah bertambah secara otomatis.', 'success');
+      showToast('Penerimaan barang berhasil dikonfirmasi & disinkronkan ke Spreadsheet! Stok Sub Gudang telah bertambah secara global.', 'success');
     } catch (err: any) {
       showToast(err.message || 'Gagal mengonfirmasi penerimaan barang', 'error');
     }

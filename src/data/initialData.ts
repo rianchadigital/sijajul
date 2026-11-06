@@ -109,6 +109,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 80,
     hargaSatuan: 850,
     hargaEstimasi: 850,
+    sumberAnggaran: 'APBD',
     statusAktif: true,
     keterangan: 'Antibiotik Spektrum Luas'
   },
@@ -124,6 +125,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 50,
     hargaSatuan: 450,
     hargaEstimasi: 450,
+    sumberAnggaran: 'APBD',
     statusAktif: true,
     keterangan: 'Antihipertensi ACE Inhibitor'
   },
@@ -139,6 +141,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 80,
     hargaSatuan: 350,
     hargaEstimasi: 350,
+    sumberAnggaran: 'BLUD',
     statusAktif: true,
     keterangan: 'Antasida Lambung'
   },
@@ -154,6 +157,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 20,
     hargaSatuan: 35000,
     hargaEstimasi: 35000,
+    sumberAnggaran: 'APBD',
     statusAktif: true,
     keterangan: 'APD Perlindungan Pernapasan'
   },
@@ -169,6 +173,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 50,
     hargaSatuan: 1500,
     hargaEstimasi: 1500,
+    sumberAnggaran: 'BLUD',
     statusAktif: true,
     keterangan: 'Spuit Injeksi Medis'
   },
@@ -184,6 +189,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 15,
     hargaSatuan: 28000,
     hargaEstimasi: 28000,
+    sumberAnggaran: 'APBD',
     statusAktif: true,
     keterangan: 'Desinfeksi Tangan Higienis'
   },
@@ -199,6 +205,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 10,
     hargaSatuan: 55000,
     hargaEstimasi: 55000,
+    sumberAnggaran: 'BLUD',
     statusAktif: true,
     keterangan: 'Kebutuhan Administrasi & Cetak'
   },
@@ -214,6 +221,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 5,
     hargaSatuan: 36000,
     hargaEstimasi: 36000,
+    sumberAnggaran: 'BLUD',
     statusAktif: true,
     keterangan: 'Alat Tulis Petugas'
   },
@@ -229,6 +237,7 @@ export const INITIAL_ITEMS: Item[] = [
     stokMinimum: 2,
     hargaSatuan: 450000,
     hargaEstimasi: 450000,
+    sumberAnggaran: 'APBD',
     statusAktif: true,
     keterangan: 'Pemeriksaan Tekanan Darah'
   }

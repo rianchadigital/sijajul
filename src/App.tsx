@@ -34,6 +34,7 @@ import { MasterUserView } from './views/MasterUserView';
 import { AuditLogView } from './views/AuditLogView';
 import { SettingsView } from './views/SettingsView';
 import { ProposalView } from './views/ProposalView';
+import { IncomingItemView } from './views/IncomingItemView';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => storageService.getCurrentUser());
@@ -142,8 +143,18 @@ export default function App() {
     refreshBadgesAndStats();
   }, [refreshBadgesAndStats, activeView]);
 
-  // Otomatisasi Sinkronisasi Spreadsheet Real-Time Setiap Detik (Tanpa Perlu Klik Tombol atau Refresh)
+  // Otomatisasi Sinkronisasi Spreadsheet Real-Time Setiap Detik & Pemuatan Data Global Awal
   useEffect(() => {
+    // Tarik data terbaru dari Google Spreadsheet segera saat aplikasi dibuka di browser manapun
+    gasService.syncAllFromSheets().then(res => {
+      if (res.success) {
+        refreshBadgesAndStats();
+        setSyncVersion(v => v + 1);
+      }
+    }).catch(err => {
+      console.warn('Sync awal tertunda:', err);
+    });
+
     gasService.startAutoSync(1, (_status) => {
       refreshBadgesAndStats();
       setSyncVersion(v => v + 1);
@@ -204,6 +215,10 @@ export default function App() {
       case 'stock':
       case 'stok':
         return <StockView onNavigate={handleNavigate} currentUser={currentUser} onRefreshStats={refreshBadgesAndStats} />;
+      case 'barang_masuk':
+      case 'barang-masuk':
+      case 'incoming':
+        return <IncomingItemView currentUser={currentUser} onNavigate={handleNavigate} onRefreshStats={refreshBadgesAndStats} />;
       case 'request':
       case 'permintaan':
         return <RequestView currentUser={currentUser} onRefreshStats={refreshBadgesAndStats} />;

@@ -13,6 +13,7 @@ export interface ParsedImportItem {
   stokAwalGudangBesar: number;
   keterangan: string;
   hargaSatuan?: number;
+  sumberAnggaran?: 'APBD' | 'BLUD' | string;
   isExisting: boolean;
   status: 'VALID' | 'UPDATE' | 'INVALID';
   errors: string[];
@@ -303,6 +304,7 @@ export class ExcelService {
             const rawStokMin = getVal(['Stok Minimum', 'Stok Min', 'Min Stock', 'Minimal Stok', 'Batas Minimum']);
             const rawStokAwal = getVal(['Stok Awal Gudang Besar', 'Stok Awal', 'Saldo Awal', 'Initial Stock', 'Stok Gudang Induk', 'Stok']);
             const rawHarga = getVal(['Harga Satuan (Rp)', 'Harga Satuan', 'Harga', 'Unit Price', 'Tarif', 'Harga Estimasi']);
+            const rawSumber = String(getVal(['Sumber Anggaran', 'Anggaran', 'Sumber Dana', 'Alokasi']) || '').trim().toUpperCase();
             const rawKeterangan = String(getVal(['Keterangan', 'Keterangan Tambahan', 'Note', 'Notes', 'Catatan']) || '').trim();
 
             // Skip empty rows
@@ -323,6 +325,7 @@ export class ExcelService {
             const stokMinNum = Math.max(0, parseInt(String(rawStokMin), 10) || 10);
             const stokAwalNum = Math.max(0, parseInt(String(rawStokAwal), 10) || 0);
             const hargaClean = Math.max(0, parseInt(String(rawHarga || '').replace(/[^0-9]/g, ''), 10) || 0);
+            const sumberAnggaranClean = rawSumber.includes('BLUD') ? 'BLUD' : 'APBD';
 
             // Check if matches existing item by Code or Name
             const matchByCode = rawKode ? existingCodeMap.get(rawKode.toLowerCase()) : undefined;
@@ -356,6 +359,7 @@ export class ExcelService {
               stokMinimum: stokMinNum,
               stokAwalGudangBesar: stokAwalNum,
               hargaSatuan: hargaClean,
+              sumberAnggaran: sumberAnggaranClean,
               keterangan: rawKeterangan,
               isExisting,
               status,

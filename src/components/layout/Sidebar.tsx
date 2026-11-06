@@ -4,7 +4,7 @@ import {
   Inbox, ArrowLeftRight, ClipboardCheck, CreditCard, 
   FileCheck2, FileOutput, BarChart3, Building2, 
   Layers, Users, Settings, History, ShieldAlert, X, Lightbulb,
-  PanelLeftClose
+  PanelLeftClose, ArrowDownCircle
 } from 'lucide-react';
 import { User } from '../../types';
 
@@ -64,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (id === 'master_gudang' && current === 'master-gudang') return true;
     if (id === 'master_pegawai' && current === 'master-pegawai') return true;
     if (id === 'usulan_barang' && (current === 'usulan_barang' || current === 'usulan' || current === 'proposal')) return true;
+    if (id === 'barang_masuk' && (current === 'barang_masuk' || current === 'barang-masuk' || current === 'incoming')) return true;
     return false;
   };
 
@@ -86,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'Logistik & Distribusi',
       items: [
+        { id: 'barang_masuk', label: 'Penerimaan Barang Masuk', icon: ArrowDownCircle, roles: ['ADMIN', 'PIC_GUDANG_BESAR'] },
         { id: 'request', label: 'Permintaan Barang', icon: FileText, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG', 'PEGAWAI'] },
         { id: 'usulan_barang', label: 'Usulan Barang Baru', icon: Lightbulb, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG', 'PEGAWAI'] },
         { 

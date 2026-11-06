@@ -21,6 +21,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [sumberFilter, setSumberFilter] = useState<'ALL' | 'APBD' | 'BLUD'>('ALL');
 
   // Create / Edit Modal State
   const [showModal, setShowModal] = useState(false);
@@ -69,6 +70,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
   const [kategoriId, setKategoriId] = useState('');
   const [satuan, setSatuan] = useState('Pcs');
   const [hargaSatuan, setHargaSatuan] = useState<number>(0);
+  const [sumberAnggaran, setSumberAnggaran] = useState<'APBD' | 'BLUD' | string>('APBD');
   const [merk, setMerk] = useState('');
   const [spesifikasi, setSpesifikasi] = useState('');
   const [stokMinimum, setStokMinimum] = useState(10);
@@ -105,6 +107,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     setKategoriId(categories[0]?.id || '');
     setSatuan('Pcs');
     setHargaSatuan(0);
+    setSumberAnggaran('APBD');
     setMerk('');
     setSpesifikasi('');
     setStokMinimum(10);
@@ -121,6 +124,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
     setKategoriId(item.kategoriId);
     setSatuan(item.satuan);
     setHargaSatuan(item.hargaSatuan || item.hargaEstimasi || 0);
+    setSumberAnggaran(item.sumberAnggaran || 'APBD');
     setMerk(item.merk || '');
     setSpesifikasi(item.spesifikasi || '');
     setStokMinimum(item.stokMinimum);
@@ -172,6 +176,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
       stokMinimum,
       hargaSatuan: Number(hargaSatuan) || 0,
       hargaEstimasi: Number(hargaSatuan) || 0,
+      sumberAnggaran: (sumberAnggaran as any) || 'APBD',
       statusAktif,
       keterangan: keterangan.trim()
     };
@@ -220,6 +225,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
       'Kategori': i.kategoriNama,
       'Satuan': i.satuan,
       'Harga Satuan (Rp)': i.hargaSatuan || i.hargaEstimasi || 0,
+      'Sumber Anggaran': i.sumberAnggaran || 'APBD',
       'Spesifikasi': i.spesifikasi,
       'Stok Minimum': i.stokMinimum,
       'Status': i.statusAktif ? 'Aktif' : 'Nonaktif',
@@ -309,6 +315,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
           stokMinimum: r.stokMinimum,
           stokAwalGudangBesar: r.stokAwalGudangBesar,
           hargaSatuan: r.hargaSatuan,
+          sumberAnggaran: r.sumberAnggaran,
           keterangan: r.keterangan
         })),
         {
@@ -365,14 +372,17 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
   // Filters
   const filteredItems = items.filter(item => {
     if (categoryFilter !== 'ALL' && item.kategoriId !== categoryFilter) return false;
+    if (sumberFilter !== 'ALL' && (item.sumberAnggaran || 'APBD') !== sumberFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const priceStr = String(item.hargaSatuan || item.hargaEstimasi || '');
+      const sumberStr = String(item.sumberAnggaran || 'APBD').toLowerCase();
       return (
         item.namaBarang.toLowerCase().includes(q) ||
         item.kodeBarang.toLowerCase().includes(q) ||
         (item.merk && item.merk.toLowerCase().includes(q)) ||
         item.kategoriNama.toLowerCase().includes(q) ||
+        sumberStr.includes(q) ||
         priceStr.includes(q)
       );
     }
@@ -387,6 +397,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
         row.namaBarang.toLowerCase().includes(q) ||
         row.kodeBarang.toLowerCase().includes(q) ||
         row.kategoriNama.toLowerCase().includes(q) ||
+        (row.sumberAnggaran && row.sumberAnggaran.toLowerCase().includes(q)) ||
         row.merk.toLowerCase().includes(q)
       );
     }
@@ -525,29 +536,47 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
           <input
             id="input-search-master-barang"
             type="text"
-            placeholder="Cari kode barang, nama, harga satuan, kategori..."
+            placeholder="Cari kode barang, nama, harga, APBD/BLUD..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
-          <select
-            id="select-filter-kategori-barang"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 font-semibold text-slate-700 w-full sm:w-auto"
-          >
-            <option value="ALL">Semua Kategori ({items.length})</option>
-            {categories.map((c, idx) => {
-              const count = items.filter(i => i.kategoriId === c.id || i.kategoriNama?.toLowerCase() === c.nama.toLowerCase()).length;
-              return (
-                <option key={`${c.id}-${idx}`} value={c.id}>{c.nama} ({count})</option>
-              );
-            })}
-          </select>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          {/* Filter Sumber Anggaran */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-500">Anggaran:</span>
+            <select
+              id="select-filter-sumber-anggaran"
+              value={sumberFilter}
+              onChange={(e) => setSumberFilter(e.target.value as any)}
+              className="py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 font-semibold text-slate-700"
+            >
+              <option value="ALL">Semua Sumber ({items.length})</option>
+              <option value="APBD">APBD ({items.filter(i => (i.sumberAnggaran || 'APBD') === 'APBD').length})</option>
+              <option value="BLUD">BLUD ({items.filter(i => i.sumberAnggaran === 'BLUD').length})</option>
+            </select>
+          </div>
+
+          {/* Filter Kategori */}
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              id="select-filter-kategori-barang"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="py-2 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 font-semibold text-slate-700"
+            >
+              <option value="ALL">Semua Kategori ({items.length})</option>
+              {categories.map((c, idx) => {
+                const count = items.filter(i => i.kategoriId === c.id || i.kategoriNama?.toLowerCase() === c.nama.toLowerCase()).length;
+                return (
+                  <option key={`${c.id}-${idx}`} value={c.id}>{c.nama} ({count})</option>
+                );
+              })}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -563,6 +592,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Satuan</th>
                 <th className="px-4 py-3 text-right font-bold text-slate-700">Harga Satuan (Rp)</th>
+                <th className="px-4 py-3 text-center">Anggaran</th>
                 <th className="px-4 py-3 text-center">Stok Min</th>
                 <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-center w-24">Aksi</th>
@@ -571,7 +601,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
             <tbody className="divide-y divide-slate-100">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={10} className="text-center py-12 text-slate-400">
                     <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     Tidak ditemukan data barang yang sesuai kriteria pencarian.
                   </td>
@@ -600,6 +630,15 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                       <div className="text-[10px] text-slate-400 font-medium">
                         / {item.satuan || 'Pcs'}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                        (item.sumberAnggaran || 'APBD') === 'BLUD'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {item.sumberAnggaran || 'APBD'}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-slate-700">{item.stokMinimum}</td>
                     <td className="px-4 py-3 text-center">
@@ -1032,7 +1071,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Kode Barang</label>
                   <input
@@ -1055,6 +1094,22 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                     {categories.map(c => (
                       <option key={c.id} value={c.id}>{c.nama}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Sumber Anggaran <span className="text-teal-700 font-normal text-xs">*</span>
+                  </label>
+                  <select
+                    id="select-sumber-anggaran-barang"
+                    required
+                    value={sumberAnggaran}
+                    onChange={(e) => setSumberAnggaran(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="APBD">APBD (Anggaran Pemprov)</option>
+                    <option value="BLUD">BLUD (Operasional Puskesmas)</option>
                   </select>
                 </div>
               </div>

@@ -51,6 +51,7 @@ export interface Item {
   namaBarang: string;
   kategoriId: string;
   kategoriNama: string;
+  kategori?: string;
   satuan: string;
   merk: string;
   spesifikasi: string;
@@ -59,6 +60,10 @@ export interface Item {
   keterangan: string;
   hargaEstimasi?: number;
   hargaSatuan?: number;
+  sumberAnggaran?: 'APBD' | 'BLUD' | string;
+  totalStok?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface WarehouseStock {
@@ -189,6 +194,8 @@ export interface StockTransaction {
   userId: string;
   userNama: string;
   referensiDokumen?: string;
+  sumberAnggaran?: 'APBD' | 'BLUD' | string;
+  hargaSatuan?: number;
   keterangan: string;
   createdAt: string;
 }

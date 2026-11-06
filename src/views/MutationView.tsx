@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeftRight, Plus, Search, 
-  Building2, Package, CheckCircle2, History 
+  Building2, Package, CheckCircle2, History, AlertCircle, X
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { Warehouse, Item, User, StockTransaction } from '../types';
 
 interface MutationViewProps {
@@ -23,6 +24,7 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
   const [selectedItemId, setSelectedItemId] = useState('');
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState('');
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'ADMIN';
   const isPicBesar = currentUser?.role === 'PIC_GUDANG_BESAR';
@@ -84,17 +86,17 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
     // Role check: Gudang pustu tidak bisa mengedit gudang besar
     if (isPicSub) {
       if (sourceWhId !== userAssignedWarehouse?.id) {
-        alert('Gudang pustu hanya dapat memutasi barang dari unit gudang penugasan sendiri!');
+        setToast({ msg: 'Gudang pustu hanya dapat memutasi barang dari unit gudang penugasan sendiri!', type: 'error' });
         return;
       }
       if (targetWhId === gudangBesar?.id) {
-        alert('Gudang pustu tidak dapat memutasi langsung ke Gudang Besar tanpa izin Super Admin!');
+        setToast({ msg: 'Gudang pustu tidak dapat memutasi langsung ke Gudang Besar tanpa izin Super Admin!', type: 'error' });
         return;
       }
     }
 
     if (qty > sourceStock) {
-      alert(`Stok di gudang asal tidak mencukupi (${sourceStock} ${currentItem?.satuan})!`);
+      setToast({ msg: `Stok di gudang asal tidak mencukupi (${sourceStock} ${currentItem?.satuan})!`, type: 'error' });
       return;
     }
 
@@ -130,14 +132,40 @@ export const MutationView: React.FC<MutationViewProps> = ({ currentUser, onRefre
       setQty(1);
       loadData();
       onRefreshStats();
-      alert(`Mutasi persediaan dari ${sourceWh?.namaGudang} ke ${targetWh?.namaGudang} berhasil dibukukan!`);
+
+      // Sinkronkan ke Google Spreadsheet secara global
+      gasService.pushToSheets().catch(err => console.warn('Push mutasi ke Sheets ditunda:', err));
+
+      setToast({ 
+        msg: `Mutasi persediaan dari ${sourceWh?.namaGudang} ke ${targetWh?.namaGudang} berhasil dibukukan & disinkronkan ke Spreadsheet!`, 
+        type: 'success' 
+      });
+      setTimeout(() => setToast(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Gagal memproses mutasi barang');
+      setToast({ msg: err.message || 'Gagal memproses mutasi barang', type: 'error' });
     }
   };
 
   return (
     <div className="space-y-6">
+      {/* Toast Feedback */}
+      {toast && (
+        <div className={`p-4 rounded-xl border flex items-start gap-3 shadow-sm ${
+          toast.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+            : 'bg-rose-50 border-rose-200 text-rose-900'
+        }`}>
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+          )}
+          <div className="flex-1 text-xs font-semibold">{toast.msg}</div>
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

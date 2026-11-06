@@ -17,44 +17,81 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
   const [items, setItems] = useState<Item[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [itemSearch, setItemSearch] = useState<string>('');
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
 
   const isSuperAdmin = currentUser?.role === 'ADMIN';
   const userAssignedWarehouse = currentUser ? storageService.resolveWarehouseForUser(currentUser) : null;
 
-  useEffect(() => {
+  const loadBaseData = () => {
     const whs = storageService.getWarehouses();
     const itms = storageService.getItems();
     setWarehouses(whs);
     setItems(itms);
 
-    if (currentUser?.role === 'ADMIN') {
-      if (whs.length > 0) setSelectedWarehouseId(whs[0].id);
-    } else if (currentUser?.role === 'PIC_GUDANG_BESAR') {
-      const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
-      setSelectedWarehouseId(gb.id);
-    } else {
-      const assigned = currentUser ? storageService.resolveWarehouseForUser(currentUser) : whs[0];
-      setSelectedWarehouseId(assigned.id);
+    if (!selectedWarehouseId) {
+      if (currentUser?.role === 'ADMIN') {
+        if (whs.length > 0) setSelectedWarehouseId(whs[0].id);
+      } else if (currentUser?.role === 'PIC_GUDANG_BESAR') {
+        const gb = whs.find(w => w.tipeGudang === 'GUDANG_BESAR') || whs[0];
+        setSelectedWarehouseId(gb.id);
+      } else {
+        const assigned = currentUser ? storageService.resolveWarehouseForUser(currentUser) : whs[0];
+        setSelectedWarehouseId(assigned.id);
+      }
     }
 
-    if (itms.length > 0) setSelectedItemId(itms[0].id);
-  }, [currentUser]);
+    if (!selectedItemId && itms.length > 0) {
+      setSelectedItemId(itms[0].id);
+    }
+  };
 
   useEffect(() => {
+    loadBaseData();
+  }, [currentUser]);
+
+  const loadTransactions = () => {
     if (selectedWarehouseId && selectedItemId) {
       const trxList = storageService.getItemStockTransactions(selectedWarehouseId, selectedItemId);
       setTransactions(trxList);
     }
+  };
+
+  useEffect(() => {
+    loadTransactions();
+  }, [selectedWarehouseId, selectedItemId]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      loadBaseData();
+      loadTransactions();
+    };
+    window.addEventListener('sijajul_data_updated', handleUpdate);
+    return () => window.removeEventListener('sijajul_data_updated', handleUpdate);
   }, [selectedWarehouseId, selectedItemId]);
 
   const currentWarehouse = warehouses.find(w => w.id === selectedWarehouseId);
   const currentItem = items.find(i => i.id === selectedItemId);
+  const currentStock = (selectedWarehouseId && selectedItemId)
+    ? storageService.getStockByWarehouseAndItem(selectedWarehouseId, selectedItemId)
+    : null;
+
+  // Filter items for search
+  const filteredItems = items.filter(i => {
+    if (!itemSearch) return true;
+    const q = itemSearch.toLowerCase();
+    return (
+      (i.namaBarang && i.namaBarang.toLowerCase().includes(q)) ||
+      (i.kodeBarang && i.kodeBarang.toLowerCase().includes(q)) ||
+      ((i.kategoriNama || i.kategori || '').toLowerCase().includes(q)) ||
+      (i.sumberAnggaran && i.sumberAnggaran.toLowerCase().includes(q))
+    );
+  });
 
   // Summaries
   const totalMasuk = transactions.reduce((acc, t) => acc + t.masuk, 0);
   const totalKeluar = transactions.reduce((acc, t) => acc + t.keluar, 0);
-  const latestSaldo = transactions.length > 0 ? transactions[transactions.length - 1].saldoAkhir : 0;
+  const latestSaldo = currentStock ? currentStock.saldo : (transactions.length > 0 ? transactions[transactions.length - 1].saldoAkhir : 0);
 
   const handleExportPdf = () => {
     if (!currentItem || !currentWarehouse) return;
@@ -130,20 +167,39 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-            <Package className="w-3.5 h-3.5 text-teal-700" /> Pilih Barang Persediaan
+          <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Package className="w-3.5 h-3.5 text-teal-700" /> Pilih Barang Persediaan
+            </span>
+            {currentItem && (
+              <span className="text-[11px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                Stok Fisik: {currentStock?.saldo ?? 0} {currentItem.satuan}
+              </span>
+            )}
           </label>
-          <select
-            value={selectedItemId}
-            onChange={(e) => setSelectedItemId(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800"
-          >
-            {items.map(i => (
-              <option key={i.id} value={i.id}>
-                [{i.kodeBarang}] {i.namaBarang} - {i.kategoriNama}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-1.5">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Ketik nama atau kode barang untuk memfilter pilihan..."
+                value={itemSearch}
+                onChange={(e) => setItemSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-600 focus:outline-none font-medium placeholder:text-slate-400"
+              />
+            </div>
+            <select
+              value={selectedItemId}
+              onChange={(e) => setSelectedItemId(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 font-semibold text-slate-800"
+            >
+              {filteredItems.map(i => (
+                <option key={i.id} value={i.id}>
+                  [{i.kodeBarang}] {i.namaBarang} ({i.kategoriNama} • {i.sumberAnggaran || 'APBD'})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -152,11 +208,23 @@ export const StockCardView: React.FC<StockCardViewProps> = ({ currentUser }) => 
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-sm border border-slate-700">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono bg-teal-800/80 text-teal-100 text-xs px-2 py-0.5 rounded font-bold">
                   {currentItem.kodeBarang}
                 </span>
                 <span className="text-slate-300 text-xs">{currentItem.kategoriNama}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  (currentItem.sumberAnggaran || 'APBD') === 'BLUD'
+                    ? 'bg-purple-900/60 text-purple-200 border-purple-500'
+                    : 'bg-blue-900/60 text-blue-200 border-blue-500'
+                }`}>
+                  Sumber: {currentItem.sumberAnggaran || 'APBD'}
+                </span>
+                {currentItem.hargaSatuan ? (
+                  <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                    {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(currentItem.hargaSatuan)} / {currentItem.satuan}
+                  </span>
+                ) : null}
               </div>
               <h2 className="text-lg sm:text-xl font-black mt-1">{currentItem.namaBarang}</h2>
               <p className="text-xs text-slate-300 mt-0.5">

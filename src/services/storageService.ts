@@ -846,6 +846,7 @@ class StorageService {
       stokMinimum?: number;
       stokAwalGudangBesar?: number;
       hargaSatuan?: number;
+      sumberAnggaran?: string;
       keterangan?: string;
     }[],
     options: {
@@ -928,6 +929,7 @@ class StorageService {
           stokMinimum: typeof row.stokMinimum === 'number' && !isNaN(row.stokMinimum) ? row.stokMinimum : existing.stokMinimum,
           hargaSatuan: parsedPrice !== undefined ? parsedPrice : (existing.hargaSatuan || existing.hargaEstimasi || 0),
           hargaEstimasi: parsedPrice !== undefined ? parsedPrice : (existing.hargaEstimasi || existing.hargaSatuan || 0),
+          sumberAnggaran: (row.sumberAnggaran || existing.sumberAnggaran || 'APBD') as any,
           keterangan: row.keterangan?.trim() !== undefined ? row.keterangan.trim() : existing.keterangan,
           statusAktif: true
         };
@@ -952,6 +954,7 @@ class StorageService {
           stokMinimum: typeof row.stokMinimum === 'number' && !isNaN(row.stokMinimum) ? row.stokMinimum : 10,
           hargaSatuan: parsedPrice || 0,
           hargaEstimasi: parsedPrice || 0,
+          sumberAnggaran: (row.sumberAnggaran || 'APBD') as any,
           keterangan: row.keterangan?.trim() || '',
           statusAktif: true
         };
@@ -1361,7 +1364,124 @@ class StorageService {
   }
 
   getItemStockTransactions(warehouseId: string, itemId: string): StockTransaction[] {
-    return this.getTransactions().filter(t => t.gudangId === warehouseId && t.barangId === itemId);
+    const rawTrx = this.getTransactions().filter(t => t.gudangId === warehouseId && t.barangId === itemId);
+    const stock = this.getStockByWarehouseAndItem(warehouseId, itemId);
+    const wh = this.getWarehouses().find(w => w.id === warehouseId);
+    const itm = this.getItems().find(i => i.id === itemId);
+
+    const hasSaldoAwal = rawTrx.some(t => t.jenisTransaksi === 'SALDO_AWAL');
+
+    if (!hasSaldoAwal && stock && (stock.stokAwal > 0 || stock.saldo > 0)) {
+      const initialQty = stock.stokAwal > 0 ? stock.stokAwal : stock.saldo;
+      const initialDate = stock.updateTerakhir ? stock.updateTerakhir.split(' ')[0] : new Date().toISOString().slice(0, 10);
+      const initialTrx: StockTransaction = {
+        id: `TRX-AWAL-${warehouseId}-${itemId}`,
+        tanggal: initialDate,
+        nomorTransaksi: `AWAL/${wh?.kodeGudang || 'GUD'}/${itm?.kodeBarang || 'BRG'}`,
+        gudangId: warehouseId,
+        gudangNama: wh?.namaGudang || 'Gudang Persediaan',
+        barangId: itemId,
+        barangNama: itm?.namaBarang || 'Barang Persediaan',
+        kodeBarang: itm?.kodeBarang || 'BRG',
+        satuan: itm?.satuan || 'Pcs',
+        jenisTransaksi: 'SALDO_AWAL',
+        masuk: initialQty,
+        keluar: 0,
+        saldoSebelumnya: 0,
+        saldoAkhir: initialQty,
+        userId: 'SYS-001',
+        userNama: 'Sistem Logistik',
+        sumberAnggaran: itm?.sumberAnggaran || 'APBD',
+        hargaSatuan: itm?.hargaSatuan || 0,
+        keterangan: 'Saldo Awal Fisik Persediaan Logistik Gudang',
+        createdAt: stock.updateTerakhir || new Date().toISOString().replace('T', ' ').slice(0, 19)
+      };
+      return [initialTrx, ...rawTrx];
+    }
+
+    return rawTrx;
+  }
+
+  /**
+   * Mencatat Penerimaan Barang Masuk (Pengadaan / Dropping Masuk / Hibah)
+   * Mengupdate saldo stok gudang tujuan dan mencatat mutasi riwayat kartu stok
+   */
+  recordIncomingStock(params: {
+    gudangId: string;
+    barangId: string;
+    jumlahMasuk: number;
+    sumberAnggaran?: 'APBD' | 'BLUD' | string;
+    hargaSatuan?: number;
+    nomorDokumen?: string;
+    keterangan?: string;
+    performer?: User | null;
+  }): { success: boolean; transaction: StockTransaction; stock: WarehouseStock; message: string } {
+    const qty = Number(params.jumlahMasuk) || 0;
+    if (qty <= 0) {
+      throw new Error('Jumlah barang masuk harus lebih besar dari 0.');
+    }
+
+    const items = this.getItems();
+    const itemIndex = items.findIndex(i => i.id === params.barangId);
+    if (itemIndex >= 0) {
+      let itemChanged = false;
+      if (params.sumberAnggaran && params.sumberAnggaran !== items[itemIndex].sumberAnggaran) {
+        items[itemIndex].sumberAnggaran = params.sumberAnggaran as any;
+        itemChanged = true;
+      }
+      if (typeof params.hargaSatuan === 'number' && params.hargaSatuan > 0) {
+        items[itemIndex].hargaSatuan = params.hargaSatuan;
+        items[itemIndex].hargaEstimasi = params.hargaSatuan;
+        itemChanged = true;
+      }
+      if (itemChanged) {
+        this.saveItems(items);
+      }
+    }
+
+    const item = items[itemIndex];
+    const warehouse = this.getWarehouses().find(w => w.id === params.gudangId);
+    const currentUser = params.performer || this.getCurrentUser();
+
+    const docNo = params.nomorDokumen || this.generateNumber('TRX');
+    const note = params.keterangan || `Penerimaan Barang Masuk (${params.sumberAnggaran || item?.sumberAnggaran || 'APBD'})`;
+    
+    const trx = this.recordTransaction(
+      params.gudangId,
+      params.barangId,
+      'MUTASI_MASUK',
+      qty,
+      0,
+      note,
+      docNo
+    );
+
+    // Update transaction with metadata
+    trx.sumberAnggaran = params.sumberAnggaran || item?.sumberAnggaran || 'APBD';
+    trx.hargaSatuan = params.hargaSatuan || item?.hargaSatuan || 0;
+    const allTrx = this.getTransactions();
+    const tIdx = allTrx.findIndex(t => t.id === trx.id);
+    if (tIdx >= 0) {
+      allTrx[tIdx] = trx;
+      this.saveTransactions(allTrx);
+    }
+
+    const updatedStock = this.getStockByWarehouseAndItem(params.gudangId, params.barangId);
+
+    this.recordAuditLog(
+      'BARANG_MASUK',
+      'LOGISTIK',
+      `Menerima barang masuk: ${item?.namaBarang || params.barangId} sejumlah ${qty} ${item?.satuan || 'Pcs'} di ${warehouse?.namaGudang || params.gudangId}. Sumber Anggaran: ${trx.sumberAnggaran}. Dokumen: ${docNo}`,
+      currentUser?.nama,
+      currentUser?.role
+    );
+
+    return {
+      success: true,
+      transaction: trx,
+      stock: updatedStock,
+      message: `Penerimaan barang berhasil dicatat! Saldo stok ${item?.namaBarang || ''} kini menjadi ${updatedStock.saldo} ${item?.satuan || ''}.`
+    };
   }
 
   // Activity Logs / Audit Log
@@ -2519,6 +2639,8 @@ class StorageService {
         }
 
         const hargaSatuan = Number(row['Harga Satuan (Rp)'] || row['Harga Satuan'] || row['hargaSatuan'] || row['Harga'] || row['hargaEstimasi'] || 0) || 0;
+        const rawSumber = String(row['Sumber Anggaran'] || row['sumberAnggaran'] || '').trim().toUpperCase();
+        const sumberAnggaran = rawSumber.includes('BLUD') ? 'BLUD' : 'APBD';
 
         return {
           id,
@@ -2533,7 +2655,8 @@ class StorageService {
           statusAktif,
           keterangan,
           hargaSatuan,
-          hargaEstimasi: hargaSatuan
+          hargaEstimasi: hargaSatuan,
+          sumberAnggaran
         };
       }).filter((i: Item) => !!i.namaBarang);
 
@@ -2667,27 +2790,53 @@ class StorageService {
 
     // 6. Transaksi Mutasi - Spreadsheet adalah Single Source of Truth
     if (Array.isArray(sheetData.transactions)) {
+      const allItems = this.getItems();
+      const allWarehouses = this.getWarehouses();
+
       const trxList: StockTransaction[] = sheetData.transactions.map((row: any, idx: number) => {
+        const kode = String(row['Kode Barang'] || row['kodeBarang'] || '').trim();
+        const nama = String(row['Nama Barang'] || row['barangNama'] || '').trim();
+        const gudangNama = String(row['Gudang Terkait'] || row['gudangNama'] || '').trim();
+
+        const matchedItem = allItems.find(i => 
+          (kode && i.kodeBarang.toLowerCase() === kode.toLowerCase()) || 
+          (nama && i.namaBarang.toLowerCase() === nama.toLowerCase())
+        );
+
+        const matchedWh = allWarehouses.find(w => 
+          (gudangNama && w.namaGudang.toLowerCase() === gudangNama.toLowerCase()) ||
+          (gudangNama && w.kodeGudang.toLowerCase() === gudangNama.toLowerCase()) ||
+          (gudangNama && w.id.toLowerCase() === gudangNama.toLowerCase())
+        );
+
+        const barangId = matchedItem ? matchedItem.id : (row['ID Barang'] || row['barangId'] || `ITM-${String(idx + 1).padStart(3, '0')}`);
+        const gudangId = matchedWh ? matchedWh.id : (row['ID Gudang'] || row['gudangId'] || 'GUD-001');
+        const satuan = matchedItem?.satuan || row['Satuan'] || 'Pcs';
+        const sumberAnggaran = row['Sumber Anggaran'] || matchedItem?.sumberAnggaran || 'APBD';
+        const hargaSatuan = Number(row['Harga Satuan'] || matchedItem?.hargaSatuan || 0) || 0;
+
         return {
           id: row['ID Transaksi'] || row['id'] || `TRX-${idx + 1}`,
           tanggal: row['Tanggal & Waktu'] ? String(row['Tanggal & Waktu']).slice(0, 10) : nowIso.slice(0, 10),
-          nomorTransaksi: row['Nomor Transaksi'] || `TRX-${idx + 1}`,
-          gudangId: 'GUD-001',
-          gudangNama: row['Gudang Terkait'] || '',
-          barangId: 'ITM-001',
-          barangNama: row['Nama Barang'] || '',
-          kodeBarang: row['Kode Barang'] || '',
-          satuan: 'Pcs',
-          jenisTransaksi: row['Tipe Transaksi'] || 'PENYESUAIAN',
-          masuk: Number(row['Jumlah Masuk'] || 0) || 0,
-          keluar: Number(row['Jumlah Keluar'] || 0) || 0,
-          saldoSebelumnya: 0,
-          saldoAkhir: Number(row['Saldo Akhir'] || 0) || 0,
-          userId: 'USR-001',
-          userNama: row['Petugas Operator'] || 'Operator',
-          referensiDokumen: row['Referensi Dokumen'] || '',
-          keterangan: row['Keterangan / Catatan'] || '',
-          createdAt: row['Tanggal & Waktu'] || nowIso
+          nomorTransaksi: row['Nomor Transaksi'] || row['nomorTransaksi'] || `TRX-${idx + 1}`,
+          gudangId,
+          gudangNama: matchedWh ? matchedWh.namaGudang : (gudangNama || 'Gudang Puskesmas'),
+          barangId,
+          barangNama: matchedItem ? matchedItem.namaBarang : (nama || 'Barang Persediaan'),
+          kodeBarang: matchedItem ? matchedItem.kodeBarang : kode,
+          satuan,
+          sumberAnggaran,
+          hargaSatuan,
+          jenisTransaksi: (row['Tipe Transaksi'] || row['jenisTransaksi'] || 'PENYESUAIAN') as any,
+          masuk: Number(row['Jumlah Masuk'] || row['masuk'] || 0) || 0,
+          keluar: Number(row['Jumlah Keluar'] || row['keluar'] || 0) || 0,
+          saldoSebelumnya: Number(row['Saldo Sebelumnya'] || 0) || 0,
+          saldoAkhir: Number(row['Saldo Akhir'] || row['saldoAkhir'] || 0) || 0,
+          userId: row['ID User'] || 'USR-001',
+          userNama: row['Petugas Operator'] || row['userNama'] || 'Operator',
+          referensiDokumen: row['Referensi Dokumen'] || row['referensiDokumen'] || '',
+          keterangan: row['Keterangan / Catatan'] || row['keterangan'] || '',
+          createdAt: row['Tanggal & Waktu'] || row['createdAt'] || nowIso
         };
       });
 
@@ -2866,6 +3015,30 @@ class StorageService {
           window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
         }
         localStorage.setItem('sijajul_backfill_harga_satuan_v24', 'true');
+      }
+
+      // Pastikan setiap item memiliki alokasi Sumber Anggaran (APBD / BLUD)
+      const sumberFlag = localStorage.getItem('sijajul_backfill_sumber_anggaran_v25');
+      if (!sumberFlag) {
+        const bludKeywords = ['antasida', 'spuit', 'hvs', 'ballpoint', 'blp', 'ant', 'spt'];
+        const allItems = this.getItems();
+        let changed = false;
+        const updated = allItems.map(item => {
+          if (item.sumberAnggaran) return item;
+          const k = (item.kodeBarang || '').toLowerCase();
+          const n = (item.namaBarang || '').toLowerCase();
+          const isBlud = bludKeywords.some(w => k.includes(w) || n.includes(w));
+          changed = true;
+          return {
+            ...item,
+            sumberAnggaran: isBlud ? 'BLUD' : 'APBD'
+          };
+        });
+        if (changed) {
+          this.saveItems(updated);
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+        }
+        localStorage.setItem('sijajul_backfill_sumber_anggaran_v25', 'true');
       }
     } catch (e) {
       console.warn('Auto dummy purge check warning:', e);

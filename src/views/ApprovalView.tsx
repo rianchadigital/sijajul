@@ -5,6 +5,7 @@ import {
   Package, Truck, Check, AlertCircle, RefreshCw, Send
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { ItemRequest, Item, Warehouse, User } from '../types';
 import { StatusBadge } from '../components/common/Badge';
 
@@ -134,6 +135,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
 
       if (actionType === 'SETUJU' && submitMode === 'FULFILL_NOW') {
         storageService.fulfillInternalRequest(selectedReq.id, approvalNotes || 'Diserahkan langsung kepada pegawai pemohon');
+        gasService.pushToSheets().catch(err => console.warn('Push approval ke Sheets:', err));
         setSelectedReq(null);
         loadData();
         onRefreshStats();
@@ -147,6 +149,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
 
       if (actionType === 'SETUJU' && submitMode === 'APPROVE_AND_DROP') {
         const newDrp = storageService.processDropping(selectedReq.id, approvalNotes || 'Disetujui untuk pengiriman dropping logistik antar pulau');
+        gasService.pushToSheets().catch(err => console.warn('Push approval ke Sheets:', err));
         setSelectedReq(null);
         loadData();
         onRefreshStats();
@@ -155,6 +158,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
         return;
       }
 
+      gasService.pushToSheets().catch(err => console.warn('Push approval ke Sheets:', err));
       setSelectedReq(null);
       loadData();
       onRefreshStats();

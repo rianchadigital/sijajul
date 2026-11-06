@@ -3,7 +3,7 @@ import {
   Home, Package, FileText, CheckSquare, 
   Menu, X, Truck, Inbox, BarChart3, Settings, 
   Layers, Users, Building2, CreditCard, FileCheck2,
-  FileOutput, ArrowLeftRight, ClipboardCheck, History
+  FileOutput, ArrowLeftRight, ClipboardCheck, History, ArrowDownCircle
 } from 'lucide-react';
 import { User } from '../../types';
 
@@ -46,6 +46,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     if (id === 'request' && current === 'permintaan') return true;
     if (id === 'receiving' && current === 'penerimaan') return true;
     if (id === 'kartu_stok' && current === 'kartu-stok') return true;
+    if (id === 'barang_masuk' && (current === 'barang_masuk' || current === 'barang-masuk' || current === 'incoming')) return true;
     return false;
   };
 
@@ -64,6 +65,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   const drawerItems = [
     { id: 'dashboard', label: 'Dashboard Utama', icon: Home, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG', 'PEGAWAI'] },
     { id: 'stock', label: 'Stok Persediaan', icon: Package, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG', 'PEGAWAI'] },
+    { id: 'barang_masuk', label: 'Penerimaan Barang Masuk', icon: ArrowDownCircle, roles: ['ADMIN', 'PIC_GUDANG_BESAR'] },
     { id: 'request', label: 'Permintaan Barang', icon: FileText, roles: ['ADMIN', 'PIC_GUDANG_BESAR', 'PIC_SUB_GUDANG', 'PEGAWAI'] },
     { id: 'approval', label: 'Approval Permintaan', icon: CheckSquare, badge: approvalCount, roles: ['ADMIN', 'PIC_GUDANG_BESAR'] },
     { id: 'dropping', label: 'Dropping / Distribusi', icon: Truck, badge: pendingDroppingCount, roles: ['ADMIN', 'PIC_GUDANG_BESAR'] },

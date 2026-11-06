@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Filter, FileText, Trash2, 
-  AlertCircle, CheckCircle, Clock, Eye, AlertTriangle, ArrowRight, UserCheck, RefreshCw, Building2, MapPin, Send
+  AlertCircle, CheckCircle, Clock, Eye, AlertTriangle, ArrowRight, UserCheck, RefreshCw, Building2, MapPin, Send,
+  X, Check
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
+import { gasService } from '../services/gasService';
 import { ItemRequest, Item, Warehouse, User } from '../types';
 import { StatusBadge } from '../components/common/Badge';
 import { WhatsappShareModal, WhatsappShareData } from '../components/common/WhatsappShareModal';
@@ -13,6 +15,186 @@ interface RequestViewProps {
   currentUser: User | null;
   onRefreshStats?: () => void;
 }
+
+interface SearchableItemPickerProps {
+  items: Item[];
+  selectedItemId: string;
+  onSelect: (itemId: string) => void;
+}
+
+const SearchableItemPicker: React.FC<SearchableItemPickerProps> = ({
+  items,
+  selectedItemId,
+  onSelect
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedItem = items.find(i => i.id === selectedItemId);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredItems = items.filter(i => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      i.namaBarang.toLowerCase().includes(q) ||
+      i.kodeBarang.toLowerCase().includes(q) ||
+      (i.kategori && i.kategori.toLowerCase().includes(q)) ||
+      (i.sumberAnggaran && i.sumberAnggaran.toLowerCase().includes(q))
+    );
+  });
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      {selectedItem && !isOpen ? (
+        <div className="flex items-center justify-between p-2 bg-white border-2 border-teal-500 rounded-lg shadow-sm">
+          <div className="flex-1 min-w-0 pr-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-mono font-bold bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
+                {selectedItem.kodeBarang}
+              </span>
+              <span className="text-xs font-bold text-slate-800 truncate">
+                {selectedItem.namaBarang}
+              </span>
+              {selectedItem.sumberAnggaran && (
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                  selectedItem.sumberAnggaran === 'BLUD'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {selectedItem.sumberAnggaran}
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-2">
+              <span>{selectedItem.kategori}</span>
+              <span>•</span>
+              <span>Satuan: <strong className="text-slate-700">{selectedItem.satuan}</strong></span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('');
+              setIsOpen(true);
+            }}
+            className="text-xs font-semibold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-md border border-teal-200 flex items-center gap-1 shrink-0"
+            title="Klik untuk mencari atau mengganti barang"
+          >
+            <Search className="w-3 h-3" /> Ganti / Cari
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <div className="relative">
+            <input
+              type="text"
+              autoFocus={isOpen}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setIsOpen(true);
+              }}
+              onFocus={() => setIsOpen(true)}
+              placeholder="🔍 Ketik nama, kode, atau kategori barang di sini..."
+              className="w-full pl-8 pr-8 py-2 text-xs bg-white border-2 border-teal-500 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 shadow-sm font-medium"
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+            {(query || selectedItem) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('');
+                  if (!query && selectedItem) {
+                    setIsOpen(false);
+                  }
+                }}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {isOpen && (
+            <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl divide-y divide-slate-100">
+              <div className="p-2 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between items-center">
+                <span>Daftar Barang ({filteredItems.length} hasil)</span>
+                <span className="text-teal-700 normal-case font-medium">Klik untuk memilih</span>
+              </div>
+              {filteredItems.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500">
+                  Tidak ditemukan barang dengan kata kunci &quot;<span className="font-semibold text-slate-700">{query}</span>&quot;
+                </div>
+              ) : (
+                filteredItems.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(item.id);
+                      setIsOpen(false);
+                      setQuery('');
+                    }}
+                    className={`w-full text-left p-2.5 hover:bg-teal-50/80 transition flex items-center justify-between gap-2 group ${
+                      item.id === selectedItemId ? 'bg-teal-50/90 border-l-4 border-teal-600' : ''
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-mono font-bold bg-slate-100 group-hover:bg-teal-100 text-slate-700 group-hover:text-teal-900 px-1.5 py-0.5 rounded">
+                          {item.kodeBarang}
+                        </span>
+                        <span className="text-xs font-bold text-slate-800 group-hover:text-teal-950">
+                          {item.namaBarang}
+                        </span>
+                        {item.sumberAnggaran && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            item.sumberAnggaran === 'BLUD'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.sumberAnggaran}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-2">
+                        <span>{item.kategori}</span>
+                        <span>•</span>
+                        <span>Satuan: <strong className="text-slate-700">{item.satuan}</strong></span>
+                        {item.spesifikasi && (
+                          <>
+                            <span>•</span>
+                            <span className="italic truncate max-w-[150px]">{item.spesifikasi}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {item.id === selectedItemId && (
+                      <span className="text-xs font-bold text-teal-700 flex items-center gap-0.5 shrink-0">
+                        <Check className="w-3.5 h-3.5" /> Terpilih
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUser, onRefreshStats }) => {
   const [requests, setRequests] = useState<ItemRequest[]>([]);
@@ -134,7 +316,11 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
       setFormItems([{ barangId: '', jumlahDiminta: 1, keterangan: '' }]);
       loadData();
       if (onRefreshStats) onRefreshStats();
-      setFeedbackMsg('Permintaan berhasil diajukan! Anda dapat membagikan notifikasi langsung ke WhatsApp.');
+
+      // Sinkronkan langsung ke Google Spreadsheet secara global
+      gasService.pushToSheets().catch(e => console.warn('Push permintaan ke Sheets ditunda:', e));
+
+      setFeedbackMsg('Permintaan berhasil diajukan dan disinkronkan ke database Spreadsheet! Anda dapat membagikan notifikasi langsung ke WhatsApp.');
       setTimeout(() => setFeedbackMsg(null), 4000);
 
       // Siapkan data WhatsApp share dengan link langsung ke approval
@@ -547,21 +733,13 @@ export const RequestView: React.FC<RequestViewProps> = ({ onNavigate, currentUse
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                          {/* Item Selector */}
+                          {/* Searchable Item Selector with White Input Field */}
                           <div className="sm:col-span-6">
-                            <select
-                              required
-                              value={itemRow.barangId}
-                              onChange={(e) => handleItemChange(idx, 'barangId', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 font-medium"
-                            >
-                              <option value="">-- Pilih Barang Persediaan --</option>
-                              {items.map(i => (
-                                <option key={i.id} value={i.id}>
-                                  [{i.kodeBarang}] {i.namaBarang} ({i.satuan})
-                                </option>
-                              ))}
-                            </select>
+                            <SearchableItemPicker
+                              items={items}
+                              selectedItemId={itemRow.barangId}
+                              onSelect={(itemId) => handleItemChange(idx, 'barangId', itemId)}
+                            />
                           </div>
 
                           {/* Stock Origin Warehouse Preview */}

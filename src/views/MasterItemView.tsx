@@ -562,7 +562,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 <th className="px-4 py-3">Nama Barang</th>
                 <th className="px-4 py-3">Kategori</th>
                 <th className="px-4 py-3">Satuan</th>
-                <th className="px-4 py-3 text-right">Harga Satuan</th>
+                <th className="px-4 py-3 text-right font-bold text-slate-700">Harga Satuan (Rp)</th>
                 <th className="px-4 py-3 text-center">Stok Min</th>
                 <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-center w-24">Aksi</th>
@@ -593,8 +593,13 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                       </span>
                     </td>
                     <td className="px-4 py-3 font-semibold text-slate-700">{item.satuan}</td>
-                    <td className="px-4 py-3 text-right font-bold text-teal-800">
-                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.hargaSatuan || item.hargaEstimasi || 0)}
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="font-bold text-emerald-700 font-mono text-xs sm:text-sm">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.hargaSatuan || item.hargaEstimasi || 0)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium">
+                        / {item.satuan || 'Pcs'}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-slate-700">{item.stokMinimum}</td>
                     <td className="px-4 py-3 text-center">
@@ -839,6 +844,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                           <th className="px-3 py-2">Nama Barang</th>
                           <th className="px-3 py-2">Kategori</th>
                           <th className="px-3 py-2">Satuan</th>
+                          <th className="px-3 py-2 text-right">Harga Satuan</th>
                           <th className="px-3 py-2 text-center">Min Stok</th>
                           <th className="px-3 py-2 text-center">Stok Awal</th>
                           <th className="px-3 py-2">Status Validasi</th>
@@ -847,7 +853,7 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                       <tbody className="divide-y divide-slate-100">
                         {filteredPreviewRows.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="text-center py-6 text-slate-400">
+                            <td colSpan={9} className="text-center py-6 text-slate-400">
                               Tidak ada data yang sesuai filter preview.
                             </td>
                           </tr>
@@ -864,6 +870,9 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                               </td>
                               <td className="px-3 py-2 text-slate-600">{row.kategoriNama}</td>
                               <td className="px-3 py-2 font-semibold text-slate-700">{row.satuan}</td>
+                              <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                                {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(row.hargaSatuan || 0)}
+                              </td>
                               <td className="px-3 py-2 text-center font-bold text-slate-700">{row.stokMinimum}</td>
                               <td className="px-3 py-2 text-center font-bold text-teal-800">{row.stokAwalGudangBesar}</td>
                               <td className="px-3 py-2">
@@ -1077,10 +1086,13 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Harga Satuan (Rp)</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Harga Satuan (Rp) <span className="text-emerald-700 font-normal text-xs">(Per {satuan || 'Satuan'})</span>
+                  </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
                     <input
+                      id="input-harga-satuan-barang"
                       type="number"
                       min="0"
                       step="100"
@@ -1090,6 +1102,11 @@ export const MasterItemView: React.FC<MasterItemViewProps> = ({ currentUser }) =
                       className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+                  {hargaSatuan > 0 && (
+                    <div className="text-[11px] text-emerald-700 font-semibold mt-1">
+                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(hargaSatuan)} / {satuan || 'Pcs'}
+                    </div>
+                  )}
                 </div>
 
                 <div>

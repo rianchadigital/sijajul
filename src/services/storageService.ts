@@ -2821,6 +2821,52 @@ class StorageService {
         this.saveStocks(cleanStocks);
         localStorage.setItem('sijajul_dedup_items_v22', 'true');
       }
+
+      // Pastikan data harga satuan terisi secara otomatis jika belum ada atau bernilai 0
+      const priceFlag = localStorage.getItem('sijajul_backfill_harga_satuan_v24');
+      if (!priceFlag) {
+        const defaultCatalogPrices: Record<string, number> = {
+          'MED-AMX-500': 850,
+          'MED-CPT-025': 450,
+          'MED-ANT-001': 350,
+          'BHP-MSK-003': 35000,
+          'BHP-SPT-003': 1500,
+          'BHP-HNS-500': 28000,
+          'ATK-HVS-080': 55000,
+          'ATK-BLP-001': 36000,
+          'ALK-TNS-001': 450000
+        };
+
+        const currentItems = this.getItems();
+        let changed = false;
+        const updatedItems = currentItems.map(item => {
+          const currentPrice = Number(item.hargaSatuan || item.hargaEstimasi || 0);
+          if (currentPrice > 0) return item;
+
+          let newPrice = defaultCatalogPrices[item.kodeBarang] || defaultCatalogPrices[item.id];
+          if (!newPrice) {
+            const cat = (item.kategoriNama || '').toLowerCase();
+            if (cat.includes('obat')) newPrice = 750;
+            else if (cat.includes('bhp')) newPrice = 5000;
+            else if (cat.includes('alat kesehatan') || cat.includes('alk')) newPrice = 250000;
+            else if (cat.includes('atk') || cat.includes('kantor')) newPrice = 25000;
+            else newPrice = 15000;
+          }
+
+          changed = true;
+          return {
+            ...item,
+            hargaSatuan: newPrice,
+            hargaEstimasi: newPrice
+          };
+        });
+
+        if (changed) {
+          this.saveItems(updatedItems);
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+        }
+        localStorage.setItem('sijajul_backfill_harga_satuan_v24', 'true');
+      }
     } catch (e) {
       console.warn('Auto dummy purge check warning:', e);
     }

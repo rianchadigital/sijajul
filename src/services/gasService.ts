@@ -107,7 +107,7 @@ function setupDatabase() {
     "MASTER_BARANG": {
       headers: [
         "ID Barang", "Kode Barang", "Nama Barang", "Kategori", "Satuan", 
-        "Merk / Pabrikan", "Spesifikasi", "Stok Minimum", "Status", "Keterangan"
+        "Harga Satuan (Rp)", "Spesifikasi", "Stok Minimum", "Status", "Keterangan"
       ],
       widths: [120, 110, 240, 140, 90, 140, 180, 100, 90, 180]
     },
@@ -382,7 +382,7 @@ function pushAllDataToSheets(data) {
     var iRows = data.items.map(function(i) {
       return [
         i.id || "", i.kodeBarang || "", i.namaBarang || "", i.kategoriNama || "", 
-        i.satuan || "", i.merk || "", i.spesifikasi || "", i.stokMinimum || 0, 
+        i.satuan || "", Number(i.hargaSatuan || i.hargaEstimasi || 0), i.spesifikasi || "", i.stokMinimum || 0, 
         i.statusAktif ? "Aktif" : "Nonaktif", i.keterangan || ""
       ];
     });
@@ -604,6 +604,8 @@ function doGet(e) {
           namaBarang: e.parameter.namaBarang,
           kategoriNama: e.parameter.kategoriNama,
           satuan: e.parameter.satuan,
+          hargaSatuan: Number(e.parameter.hargaSatuan || e.parameter.hargaEstimasi || 0),
+          hargaEstimasi: Number(e.parameter.hargaSatuan || e.parameter.hargaEstimasi || 0),
           merk: e.parameter.merk,
           spesifikasi: e.parameter.spesifikasi,
           stokMinimum: e.parameter.stokMinimum,
@@ -769,7 +771,7 @@ function saveSingleItemToSheet(item, initialStock) {
     item.namaBarang || "",
     item.kategoriNama || item.kategori || "Umum",
     item.satuan || "Pcs",
-    item.merk || "",
+    Number(item.hargaSatuan !== undefined ? item.hargaSatuan : (item.hargaEstimasi || 0)) || 0,
     item.spesifikasi || "",
     Number(item.stokMinimum || 10) || 10,
     (item.statusAktif === false || item.status === "Nonaktif") ? "Nonaktif" : "Aktif",
@@ -1317,6 +1319,8 @@ export class GasService {
         namaBarang: item.namaBarang,
         kategoriNama: item.kategoriNama || item.kategoriId || 'Umum',
         satuan: item.satuan || 'Pcs',
+        hargaSatuan: Number(item.hargaSatuan || item.hargaEstimasi || 0),
+        hargaEstimasi: Number(item.hargaSatuan || item.hargaEstimasi || 0),
         merk: item.merk || '',
         spesifikasi: item.spesifikasi || '',
         stokMinimum: Number(item.stokMinimum || 10) || 10,
@@ -1363,6 +1367,8 @@ export class GasService {
         namaBarang: String(item.namaBarang || ''),
         kategoriNama: String(item.kategoriNama || 'Umum'),
         satuan: String(item.satuan || 'Pcs'),
+        hargaSatuan: String(item.hargaSatuan || item.hargaEstimasi || 0),
+        hargaEstimasi: String(item.hargaSatuan || item.hargaEstimasi || 0),
         merk: String(item.merk || ''),
         spesifikasi: String(item.spesifikasi || ''),
         stokMinimum: String(item.stokMinimum || 10),

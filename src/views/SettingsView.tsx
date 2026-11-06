@@ -1961,15 +1961,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
             <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-5 space-y-3">
               <div className="flex items-center gap-2 font-extrabold text-blue-950 text-sm">
                 <AlertCircle className="w-4 h-4 text-blue-700" />
-                <span>Penyebab Layar Blank ("Ngeblenk") di Hostinger &amp; Solusinya:</span>
+                <span>Penyebab Sebelumnya Belum Terupdate di GitHub &amp; Hostinger:</span>
               </div>
               <p className="text-xs text-blue-900 leading-relaxed">
-                Hosting standar Hostinger (Apache / LiteSpeed) tidak mengompilasi file TypeScript/React (<code>.tsx</code>) secara langsung. Jika Anda hanya menarik repositori Git ke <code>public_html/</code>, browser akan meminta <code>/src/main.tsx</code> dan memicu layar putih kosong (blank).
+                Hosting standar Hostinger (Apache / LiteSpeed) tidak memiliki runtime Node.js untuk menjalankan <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[11px]">npm run build</code> secara langsung di server. Ketika repositori di-push dari AI Studio atau GitHub tanpa folder <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[11px]">dist/</code> dan <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[11px]">assets/</code> yang baru dikompilasi, Hostinger tetap menyajikan file cache lama.
               </p>
-              <div className="bg-white/80 p-3.5 rounded-xl border border-blue-200 text-xs text-blue-950 space-y-1.5 font-medium">
-                <div>✅ <strong>Vite Base URL:</strong> Telah disetel ke <code>base: './'</code> agar aset CSS/JS dapat dimuat dari direktori mana pun tanpa error 404.</div>
-                <div>✅ <strong>File .htaccess:</strong> Telah dibuat otomatis di <code>public/.htaccess</code> dan root untuk mendukung SPA routing Apache.</div>
-                <div>✅ <strong>GitHub Actions Workflow:</strong> File <code>.github/workflows/deploy.yml</code> telah disiapkan untuk mengompilasi dan mengunggah otomatis ke Hostinger via FTP!</div>
+              <div className="bg-white/90 p-3.5 rounded-xl border border-blue-200 text-xs text-blue-950 space-y-1.5 font-medium">
+                <div>✅ <strong>Build Produksi Terkompilasi:</strong> Seluruh file bundel di <code className="bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">dist/</code>, <code className="bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">assets/</code>, dan <code className="bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">images/</code> telah selesai dikompilasi dan siap di-push ke GitHub.</div>
+                <div>✅ <strong>Package-Lock &amp; Actions Diperbaiki:</strong> File <code className="bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">package-lock.json</code> telah dibuat dan workflow GitHub Actions kini memiliki izin otomatis meng-commit bundle build terbaru ke GitHub (<code className="bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">chore(deploy): auto-sync production build</code>).</div>
+                <div>✅ <strong>Cara Update di Hostinger:</strong> Buka <strong>hPanel Hostinger &gt; Git</strong> &gt; klik tombol <strong>Deploy</strong>, lalu tekan tombol <strong>Flush Cache LiteSpeed</strong> di Dashboard Hostinger agar perubahan langsung tampil.</div>
               </div>
             </div>
 

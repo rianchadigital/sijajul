@@ -7,24 +7,43 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: 📦 Install Dependencies
-        run: npm install
+        run: |
+          npm install --no-audit --no-fund
 
       - name: 🏗️ Build Production Bundle & Sync Assets
-        run: npm run build
+        run: |
+          npm run build
+
+      - name: 🔄 Sinkronisasi Hasil Build Produksi ke Repositori GitHub
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -f dist/ assets/ images/ build-version.json package-lock.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(deploy): auto-sync production build bundle for Hostinger [skip ci]"
+            git push
+            echo "✅ Hasil build produksi dan assets terbaru berhasil di-push ke GitHub!"
+          else
+            echo "ℹ️ Hasil build produksi sudah sinkron dan tidak ada perubahan."
+          fi
 
       - name: 📦 Simpan Hasil Build sebagai Artifact (ZIP Siap Pakai)
         uses: actions/upload-artifact@v4
@@ -54,9 +73,8 @@ jobs:
       - name: ℹ️ Informasi Status Deployment
         if: ${{ secrets.HOSTINGER_FTP_HOST == '' && secrets.HOSTINGER_WEBHOOK_URL == '' }}
         run: |
-          echo "::notice ::Secret HOSTINGER_FTP_HOST belum dikonfigurasi di GitHub Secrets."
-          echo "Hasil build siap pakai telah disimpan di GitHub Actions Artifacts: sijajul-hostinger-build"
-          echo "Untuk deploy otomatis via FTP, atur HOSTINGER_FTP_HOST, HOSTINGER_FTP_USER, HOSTINGER_FTP_PASSWORD di Settings > Secrets > Actions."
+          echo "::notice ::Build produksi (dist/ & assets/) telah terkompilasi dan tersimpan di repositori GitHub."
+          echo "Jika menggunakan Hostinger Git Deployment, klik tombol Deploy di hPanel Hostinger untuk menerapkan pembaruan secara instan."
 
       - name: 📋 Ringkasan Deployment
         run: |

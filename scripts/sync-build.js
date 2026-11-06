@@ -52,7 +52,46 @@ if (fs.existsSync(rootAssetsDir)) {
   }
 }
 
-// 4. Salin index.php dan .htaccess ke dalam dist/ agar dist/ mandiri
+// 4. Pastikan folder root /images ada dan sinkron dari public/images
+const publicImagesDir = path.join(rootDir, 'public', 'images');
+const rootImagesDir = path.join(rootDir, 'images');
+const distImagesDir = path.join(distDir, 'images');
+
+if (!fs.existsSync(rootImagesDir)) {
+  fs.mkdirSync(rootImagesDir, { recursive: true });
+}
+
+const copyImages = (srcDir) => {
+  if (fs.existsSync(srcDir)) {
+    const imgFiles = fs.readdirSync(srcDir);
+    for (const f of imgFiles) {
+      const srcFile = path.join(srcDir, f);
+      const destFile = path.join(rootImagesDir, f);
+      if (fs.statSync(srcFile).isFile()) {
+        fs.copyFileSync(srcFile, destFile);
+        console.log(`  ✅ Image tersinkron ke root: images/${f}`);
+      }
+    }
+  }
+};
+
+copyImages(publicImagesDir);
+copyImages(distImagesDir);
+
+// 5. Buat file build-version.json di root dan dist
+const buildInfo = {
+  appName: 'SI JAJUL - Puskesmas Kepulauan Seribu Selatan',
+  buildTime: new Date().toISOString(),
+  timestamp: Date.now(),
+  target: 'Hostinger Production',
+  status: 'READY'
+};
+
+fs.writeFileSync(path.join(distDir, 'build-version.json'), JSON.stringify(buildInfo, null, 2));
+fs.writeFileSync(path.join(rootDir, 'build-version.json'), JSON.stringify(buildInfo, null, 2));
+console.log('  ✅ build-version.json berhasil dibuat');
+
+// 6. Salin index.php dan .htaccess ke dalam dist/ agar dist/ mandiri
 const indexPhpSrc = path.join(rootDir, 'index.php');
 const indexPhpDist = path.join(distDir, 'index.php');
 if (fs.existsSync(indexPhpSrc)) {

@@ -98,7 +98,9 @@ if (!empty($ext) && isset($mimes[$ext])) {
 $distIndex = __DIR__ . '/dist/index.html';
 if (file_exists($distIndex) && filesize($distIndex) > 0) {
     header('Content-Type: text/html; charset=UTF-8');
-    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     header('X-Frame-Options: SAMEORIGIN');
     readfile($distIndex);
     exit;
@@ -111,42 +113,57 @@ if (file_exists($rootIndex)) {
     // Jika root index.html bukan file dev mentah (tidak merujuk ke /src/main.tsx)
     if (strpos($content, '/src/main.tsx') === false) {
         header('Content-Type: text/html; charset=UTF-8');
-        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         echo $content;
         exit;
     }
 }
 
 // Prioritas C: Render dinamis mandiri dari file bundel yang ada di assets/
-$bundleJs = null;
-$bundleCss = null;
+$allJsFiles = [];
+$allCssFiles = [];
 
 $scanDirs = [__DIR__ . '/dist/assets', __DIR__ . '/assets'];
 foreach ($scanDirs as $sDir) {
     if (is_dir($sDir)) {
-        $jsFiles = glob($sDir . '/index-*.js');
-        if (empty($jsFiles)) {
-            $jsFiles = glob($sDir . '/*.js');
+        $foundJs = glob($sDir . '/index-*.js');
+        if (empty($foundJs)) {
+            $foundJs = glob($sDir . '/*.js');
         }
-        if (!empty($jsFiles) && !$bundleJs) {
-            usort($jsFiles, function($a, $b) { return filemtime($b) - filemtime($a); });
-            $bundleJs = basename($jsFiles[0]);
+        foreach ($foundJs as $f) {
+            if (is_file($f)) $allJsFiles[] = $f;
         }
 
-        $cssFiles = glob($sDir . '/index-*.css');
-        if (empty($cssFiles)) {
-            $cssFiles = glob($sDir . '/*.css');
+        $foundCss = glob($sDir . '/index-*.css');
+        if (empty($foundCss)) {
+            $foundCss = glob($sDir . '/*.css');
         }
-        if (!empty($cssFiles) && !$bundleCss) {
-            usort($cssFiles, function($a, $b) { return filemtime($b) - filemtime($a); });
-            $bundleCss = basename($cssFiles[0]);
+        foreach ($foundCss as $f) {
+            if (is_file($f)) $allCssFiles[] = $f;
         }
     }
 }
 
+$bundleJs = null;
+$bundleCss = null;
+
+if (!empty($allJsFiles)) {
+    usort($allJsFiles, function($a, $b) { return filemtime($b) - filemtime($a); });
+    $bundleJs = basename($allJsFiles[0]);
+}
+
+if (!empty($allCssFiles)) {
+    usort($allCssFiles, function($a, $b) { return filemtime($b) - filemtime($a); });
+    $bundleCss = basename($allCssFiles[0]);
+}
+
 if ($bundleJs) {
     header('Content-Type: text/html; charset=UTF-8');
-    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     ?>
 <!doctype html>
 <html lang="id">

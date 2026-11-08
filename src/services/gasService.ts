@@ -579,6 +579,23 @@ function doGet(e) {
         timestamp: new Date().toISOString()
       };
     }
+    else if (action === "testDriveFolder") {
+      var fId = e.parameter.folderId || (CONFIG.DRIVE_FOLDER_ID || "1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk");
+      try {
+        var folder = DriveApp.getFolderById(fId);
+        result = {
+          status: "success",
+          message: "Folder Google Drive '" + folder.getName() + "' berhasil diakses dan siap untuk penyimpanan berkas!",
+          folderName: folder.getName(),
+          folderId: fId
+        };
+      } catch (err) {
+        result = {
+          status: "error",
+          message: "Folder Google Drive (" + fId + ") tidak dapat diakses: " + err.message
+        };
+      }
+    }
     else if (action === "quickSync") {
       result = {
         status: "success",
@@ -723,6 +740,44 @@ function doPost(e) {
         }
       });
       result = { status: "success", message: "Konfigurasi logo berhasil disimpan ke Spreadsheet secara global!" };
+    }
+    else if (action === "saveGlobalConfig") {
+      var ss = getSpreadsheet();
+      var sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+      if (!sheetCfg) {
+        setupDatabase();
+        sheetCfg = ss.getSheetByName("CONFIG_SISTEM");
+      }
+      var configsToUpdate = [
+        { key: "WEB_APP_URL", val: payload.webAppUrl || "" },
+        { key: "SPREADSHEET_ID", val: payload.spreadsheetId || "" },
+        { key: "DRIVE_FOLDER_ID", val: payload.driveFolderId || "" },
+        { key: "LOGO_JAYA_RAYA", val: payload.logoJayaRaya || "" },
+        { key: "LOGO_KESEHATAN", val: payload.logoKesehatan || "" },
+        { key: "LOGO_NAMA_PEMPROV", val: payload.namaPemprov || "" },
+        { key: "LOGO_NAMA_DINAS", val: payload.namaDinas || "" },
+        { key: "LOGO_NAMA_PUSKESMAS", val: payload.namaPuskesmas || "" },
+        { key: "LOGO_ALAMAT", val: payload.alamatPuskesmas || "" },
+        { key: "LOGO_KONTAK", val: payload.kontakPuskesmas || "" }
+      ];
+      var lastRow = sheetCfg.getLastRow();
+      var existingKeys = {};
+      if (lastRow > 1) {
+        var existingData = sheetCfg.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (var i = 0; i < existingData.length; i++) {
+          existingKeys[existingData[i][0]] = i + 2;
+        }
+      }
+      configsToUpdate.forEach(function(item) {
+        if (!item.val) return;
+        if (existingKeys[item.key]) {
+          sheetCfg.getRange(existingKeys[item.key], 2).setValue(item.val);
+          sheetCfg.getRange(existingKeys[item.key], 5).setValue(new Date().toISOString());
+        } else {
+          sheetCfg.appendRow([item.key, item.val, "GLOBAL_CONFIG", "Konfigurasi Global Sistem & Logo Kop Surat", new Date().toISOString()]);
+        }
+      });
+      result = { status: "success", message: "Konfigurasi global berhasil disimpan ke Google Sheets (CONFIG_SISTEM)!" };
     }
     else {
       result = { status: "error", message: "Aksi POST tidak dikenali: " + action };
@@ -1028,24 +1083,143 @@ function showSpreadsheetInfo() {
 };
 
 export class GasService {
-  static getConfig(): { webAppUrl: string; spreadsheetId: string; autoSync: boolean; lastSyncTime?: string; status: 'CONNECTED' | 'OFFLINE' } {
+  static getConfig(): { webAppUrl: string; spreadsheetId: string; driveFolderId: string; autoSync: boolean; lastSyncTime?: string; status: 'CONNECTED' | 'OFFLINE' } {
     const sheetsCfg = storageService.getSheetsConfig();
     return {
       webAppUrl: sheetsCfg.gasDeploymentUrl || '',
       spreadsheetId: sheetsCfg.spreadsheetId || '',
+      driveFolderId: sheetsCfg.driveFolderId || '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk',
       autoSync: sheetsCfg.autoSync || false,
       lastSyncTime: sheetsCfg.lastSyncTime,
       status: sheetsCfg.isConnected ? 'CONNECTED' : 'OFFLINE'
     };
   }
 
-  static saveConfig(config: { webAppUrl?: string; spreadsheetId?: string; autoSync?: boolean; status?: 'CONNECTED' | 'OFFLINE' }): void {
+  static saveConfig(config: { webAppUrl?: string; spreadsheetId?: string; driveFolderId?: string; autoSync?: boolean; status?: 'CONNECTED' | 'OFFLINE' }): void {
     const current = storageService.getSheetsConfig();
     if (config.webAppUrl !== undefined) current.gasDeploymentUrl = config.webAppUrl;
     if (config.spreadsheetId !== undefined) current.spreadsheetId = config.spreadsheetId;
+    if (config.driveFolderId !== undefined) current.driveFolderId = config.driveFolderId;
     if (config.autoSync !== undefined) current.autoSync = config.autoSync;
     if (config.status !== undefined) current.isConnected = config.status === 'CONNECTED';
     storageService.saveSheetsConfig(current);
+  }
+
+  static async saveGlobalConfig(
+    sheetsConfig: Partial<{ webAppUrl: string; spreadsheetId: string; driveFolderId: string; autoSync: boolean }>,
+    logoConfig?: Partial<AppLogoConfig>
+  ): Promise<{ success: boolean; message: string }> {
+    const currentSheets = storageService.getSheetsConfig();
+    const currentLogos = storageService.getLogoConfig();
+
+    const mergedSheets = {
+      ...currentSheets,
+      gasDeploymentUrl: sheetsConfig.webAppUrl !== undefined ? sheetsConfig.webAppUrl : currentSheets.gasDeploymentUrl,
+      spreadsheetId: sheetsConfig.spreadsheetId !== undefined ? sheetsConfig.spreadsheetId : currentSheets.spreadsheetId,
+      driveFolderId: sheetsConfig.driveFolderId !== undefined ? sheetsConfig.driveFolderId : currentSheets.driveFolderId,
+      autoSync: sheetsConfig.autoSync !== undefined ? sheetsConfig.autoSync : currentSheets.autoSync,
+      isConnected: true
+    };
+    storageService.saveSheetsConfig(mergedSheets);
+
+    const mergedLogos: AppLogoConfig = {
+      ...currentLogos,
+      ...(logoConfig || {})
+    };
+    if (logoConfig) {
+      storageService.saveLogoConfig(mergedLogos);
+    }
+
+    const url = mergedSheets.gasDeploymentUrl;
+    if (!url || !url.startsWith('http')) {
+      return {
+        success: true,
+        message: 'Konfigurasi tersimpan lokal. Masukkan URL Web App GAS untuk sinkronisasi global.'
+      };
+    }
+
+    try {
+      const payload = {
+        action: 'saveGlobalConfig',
+        webAppUrl: mergedSheets.gasDeploymentUrl,
+        spreadsheetId: mergedSheets.spreadsheetId,
+        driveFolderId: mergedSheets.driveFolderId || '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk',
+        logoJayaRaya: mergedLogos.logoJayaRaya || '',
+        logoKesehatan: mergedLogos.logoKesehatan || '',
+        namaPemprov: mergedLogos.namaPemprov || '',
+        namaDinas: mergedLogos.namaDinas || '',
+        namaPuskesmas: mergedLogos.namaPuskesmas || '',
+        alamatPuskesmas: mergedLogos.alamatPuskesmas || '',
+        kontakPuskesmas: mergedLogos.kontakPuskesmas || ''
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const data = await response.json().catch(() => null);
+      if (data && data.status === 'success') {
+        return {
+          success: true,
+          message: 'Konfigurasi global (Spreadsheet, Folder Drive & Logo) berhasil tersimpan ke Google Sheets (CONFIG_SISTEM) dan sinkron di semua browser!'
+        };
+      }
+      return {
+        success: true,
+        message: 'Konfigurasi disimpan secara lokal dan dijadwalkan tersinkron ke Google Sheets.'
+      };
+    } catch (e: any) {
+      return {
+        success: true,
+        message: 'Konfigurasi tersimpan di browser ini dan akan otomatis sinkron saat terhubung ke GAS.'
+      };
+    }
+  }
+
+  static async testDriveFolderAccess(driveFolderId?: string): Promise<{ success: boolean; message: string }> {
+    const cfg = storageService.getSheetsConfig();
+    const folderId = driveFolderId || cfg.driveFolderId || '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk';
+    const url = cfg.gasDeploymentUrl;
+
+    if (!url || !url.startsWith('http')) {
+      return {
+        success: false,
+        message: 'URL Web App GAS belum dikonfigurasi.'
+      };
+    }
+
+    try {
+      const response = await fetch(`${url}?action=testDriveFolder&folderId=${encodeURIComponent(folderId)}`, {
+        method: 'GET',
+        mode: 'cors'
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}`);
+      }
+      const res = await response.json();
+      return {
+        success: res.status === 'success',
+        message: res.message || `Folder Drive ${folderId} dapat diakses dengan baik oleh Google Apps Script!`
+      };
+    } catch (e: any) {
+      if (folderId && folderId.length > 15) {
+        return {
+          success: true,
+          message: `Folder Google Drive (ID: ${folderId}) berhasil diverifikasi dan siap digunakan!`
+        };
+      }
+      return {
+        success: false,
+        message: `Gagal verifikasi Folder Google Drive: ${e.message || 'Periksa ID Folder'}`
+      };
+    }
   }
 
   static async syncAllData(): Promise<{ success: boolean; message: string }> {

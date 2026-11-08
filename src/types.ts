@@ -339,6 +339,7 @@ export interface NumberFormatConfig {
 export interface GoogleSheetsConfig {
   spreadsheetId: string;
   gasDeploymentUrl: string;
+  driveFolderId?: string;
   autoSync: boolean;
   lastSyncTime?: string;
   isConnected: boolean;
@@ -347,6 +348,7 @@ export interface GoogleSheetsConfig {
 export interface GasConfig {
   webAppUrl: string;
   spreadsheetId?: string;
+  driveFolderId?: string;
   autoSync: boolean;
   lastSyncTime?: string;
   status: 'CONNECTED' | 'OFFLINE';

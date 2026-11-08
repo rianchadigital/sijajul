@@ -92,7 +92,7 @@ export default function App() {
     const pendingAppr = requests.filter(r => r.status === 'DIAJUKAN' || r.status === 'DIPERIKSA').length;
     const pendingDrp = requests.filter(r => r.status === 'DISETUJUI').length;
     const pendingRec = droppings.filter(d => d.status !== 'SELESAI' && d.status !== 'DITERIMA').length;
-    const unread = notifs.filter(n => !n.isRead).length;
+    const unread = notifs.filter(n => !(n.isRead || n.dibaca)).length;
 
     setPendingApprovalCount(pendingAppr);
     setPendingDroppingCount(pendingDrp);

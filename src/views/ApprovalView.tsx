@@ -223,6 +223,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
           notes || 'Disetujui dan langsung diserahkan kepada pegawai'
         );
         storageService.fulfillInternalRequest(req.id, notes || 'Diserahkan langsung oleh pengelola gudang tempat tugas');
+        gasService.pushToSheets().catch(err => console.warn('Push approval fulfill ke Sheets:', err));
         setConfirmAction(null);
         loadData();
         onRefreshStats();
@@ -238,6 +239,7 @@ export const ApprovalView: React.FC<ApprovalViewProps> = ({ onNavigate, currentU
           notes || 'Disetujui untuk pengiriman dropping logistik'
         );
         const newDrp = storageService.processDropping(req.id, notes || 'Pengiriman dropping logistik antar pulau');
+        gasService.pushToSheets().catch(err => console.warn('Push approval dropping ke Sheets:', err));
         setConfirmAction(null);
         loadData();
         onRefreshStats();

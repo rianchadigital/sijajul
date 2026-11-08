@@ -1336,6 +1336,96 @@ class StorageService {
     this.setItem(STORAGE_KEYS.SBBK_DOCS, docs);
   }
 
+  getOrCreateBastForDropping(drp: Dropping): BastDocument {
+    const bastDocs = this.getBastDocs();
+    const existing = bastDocs.find(b => 
+      b.droppingId === drp.id || 
+      (drp.nomorBast && b.nomorBast === drp.nomorBast) ||
+      b.nomorDropping === drp.nomorDropping
+    );
+    if (existing) return existing;
+
+    const currentUser = this.getCurrentUser();
+    const req = this.getRequests().find(r => r.id === drp.permintaanId || r.nomorPermintaan === drp.nomorPermintaan);
+    const nomorBast = drp.nomorBast || this.generateNumber('BAST');
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    const newBast: BastDocument = {
+      id: `BAST-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      nomorBast,
+      droppingId: drp.id,
+      nomorDropping: drp.nomorDropping,
+      tanggal: drp.tanggalDropping || nowStr.slice(0, 10),
+      pihakPertamaId: drp.petugasPengirimId || currentUser?.id || 'USR-002',
+      pihakPertamaNama: drp.petugasPengirimNama || currentUser?.nama || 'Hendra Setiawan, S.Farm',
+      pihakPertamaNip: currentUser?.nip || '198807212011011008',
+      pihakPertamaJabatan: currentUser?.jabatan || 'Koordinator Logistik Gudang',
+      pihakKeduaId: req?.pemohonId || drp.penerimaId || 'USR-003',
+      pihakKeduaNama: req?.pemohonNama || drp.penerimaNama || 'Penanggung Jawab Sub Gudang',
+      pihakKeduaNip: req?.pemohonNip || '-',
+      pihakKeduaJabatan: req?.pemohonJabatan || 'Pengelola Farmasi & Alkes Pustu',
+      gudangAsalId: drp.gudangAsalId || 'GUD-001',
+      gudangAsalNama: drp.gudangAsalNama || 'Gudang Puskesmas Kepulauan Seribu Selatan',
+      gudangTujuanId: drp.gudangTujuanId || 'GUD-002',
+      gudangTujuanNama: drp.gudangTujuanNama || 'Gudang Tujuan',
+      items: drp.items || [],
+      keterangan: drp.keterangan || `Serah terima barang persediaan atas dropping ${drp.nomorDropping}`,
+      createdAt: drp.createdAt || nowStr
+    };
+
+    if (!drp.nomorBast) {
+      drp.nomorBast = nomorBast;
+      const allDrps = this.getDroppings().map(d => d.id === drp.id ? { ...d, nomorBast } : d);
+      this.saveDroppings(allDrps);
+    }
+
+    this.saveBastDocs([newBast, ...bastDocs]);
+    return newBast;
+  }
+
+  getOrCreateSbbkForDropping(drp: Dropping): SbbkDocument {
+    const sbbkDocs = this.getSbbkDocs();
+    const existing = sbbkDocs.find(s => 
+      s.droppingId === drp.id || 
+      (drp.nomorSbbk && s.nomorSbbk === drp.nomorSbbk) ||
+      s.nomorDropping === drp.nomorDropping
+    );
+    if (existing) return existing;
+
+    const currentUser = this.getCurrentUser();
+    const req = this.getRequests().find(r => r.id === drp.permintaanId || r.nomorPermintaan === drp.nomorPermintaan);
+    const nomorSbbk = drp.nomorSbbk || this.generateNumber('SBBK');
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    const newSbbk: SbbkDocument = {
+      id: `SBBK-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      nomorSbbk,
+      droppingId: drp.id,
+      nomorDropping: drp.nomorDropping,
+      tanggal: drp.tanggalDropping || nowStr.slice(0, 10),
+      gudangAsalId: drp.gudangAsalId || 'GUD-001',
+      gudangAsalNama: drp.gudangAsalNama || 'Gudang Puskesmas Kepulauan Seribu Selatan',
+      gudangTujuanId: drp.gudangTujuanId || 'GUD-002',
+      gudangTujuanNama: drp.gudangTujuanNama || 'Gudang Tujuan',
+      petugasGudangId: drp.petugasPengirimId || currentUser?.id || 'USR-002',
+      petugasGudangNama: drp.petugasPengirimNama || currentUser?.nama || 'Hendra Setiawan, S.Farm',
+      penerimaNama: req?.pemohonNama || drp.penerimaNama || 'Penanggung Jawab Sub Gudang',
+      penerimaNip: req?.pemohonNip || '-',
+      items: drp.items || [],
+      keterangan: drp.keterangan || `Surat Bukti Barang Keluar untuk dropping ${drp.nomorDropping}`,
+      createdAt: drp.createdAt || nowStr
+    };
+
+    if (!drp.nomorSbbk) {
+      drp.nomorSbbk = nomorSbbk;
+      const allDrps = this.getDroppings().map(d => d.id === drp.id ? { ...d, nomorSbbk } : d);
+      this.saveDroppings(allDrps);
+    }
+
+    this.saveSbbkDocs([newSbbk, ...sbbkDocs]);
+    return newSbbk;
+  }
+
   // Mutations
   getMutations(): InterWarehouseMutation[] {
     return this.getItem<InterWarehouseMutation[]>(STORAGE_KEYS.MUTATIONS, []);
@@ -1587,14 +1677,30 @@ class StorageService {
 
   getSheetsConfig(): GoogleSheetsConfig {
     const cfg = this.getItem<GoogleSheetsConfig>(STORAGE_KEYS.SHEETS_CONFIG, DEFAULT_SHEETS_CONFIG);
-    const targetGasUrl = 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
-    const targetSpreadsheetId = '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs';
+    let modified = false;
 
-    if (!cfg.gasDeploymentUrl || cfg.gasDeploymentUrl !== targetGasUrl || !cfg.spreadsheetId || cfg.spreadsheetId !== targetSpreadsheetId) {
-      cfg.spreadsheetId = targetSpreadsheetId;
-      cfg.gasDeploymentUrl = targetGasUrl;
-      cfg.autoSync = true;
+    if (!cfg.gasDeploymentUrl) {
+      cfg.gasDeploymentUrl = DEFAULT_SHEETS_CONFIG.gasDeploymentUrl;
+      modified = true;
+    }
+    if (!cfg.spreadsheetId) {
+      cfg.spreadsheetId = DEFAULT_SHEETS_CONFIG.spreadsheetId;
+      modified = true;
+    }
+    if (!cfg.driveFolderId) {
+      cfg.driveFolderId = DEFAULT_SHEETS_CONFIG.driveFolderId || '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk';
+      modified = true;
+    }
+    if (cfg.isConnected === undefined) {
       cfg.isConnected = true;
+      modified = true;
+    }
+    if (cfg.autoSync === undefined) {
+      cfg.autoSync = true;
+      modified = true;
+    }
+
+    if (modified) {
       this.saveSheetsConfig(cfg);
     }
     return cfg;
@@ -1602,6 +1708,9 @@ class StorageService {
 
   saveSheetsConfig(cfg: GoogleSheetsConfig): void {
     this.setItem(STORAGE_KEYS.SHEETS_CONFIG, cfg);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sijajul_data_updated', { detail: { action: 'sheetsConfigUpdated', config: cfg } }));
+    }
   }
 
   // Automatic Number Generator
@@ -2153,6 +2262,22 @@ class StorageService {
       status === 'DISETUJUI' ? 'SUCCESS' : 'DANGER',
       'request'
     );
+
+    // Tandai notifikasi approval sebelumnya terkait nomor permohonan ini sebagai telah dibaca
+    try {
+      const allNotifs = this.getNotifications().map(n => {
+        const matchesThisReq = (n.pesan && n.pesan.includes(req.nomorPermintaan)) || 
+                               (n.judul && n.judul.includes(req.nomorPermintaan)) ||
+                               (n.linkTarget === 'approval' && n.pesan && n.pesan.includes(req.id));
+        if (matchesThisReq && !n.dibaca) {
+          return { ...n, dibaca: true, isRead: true };
+        }
+        return n;
+      });
+      this.saveNotifications(allNotifs);
+    } catch (e) {
+      console.warn('Error clearing request notifications:', e);
+    }
 
     return req;
   }
@@ -2717,6 +2842,7 @@ class StorageService {
 
     // 4. Permintaan Barang - Spreadsheet adalah Single Source of Truth
     if (Array.isArray(sheetData.requests)) {
+      const currentRequests = this.getRequests();
       const requestsList: ItemRequest[] = sheetData.requests.map((row: any, idx: number) => {
         let items: any[] = [];
         try {
@@ -2724,27 +2850,35 @@ class StorageService {
         } catch (e) {}
 
         const reqId = row['ID Permintaan'] || row['id'] || `REQ-${idx + 1}`;
+        const reqNum = row['Nomor Permintaan'] || row['nomorPermintaan'] || `REQ-${idx + 1}`;
+        const existing = currentRequests.find(cr => cr.id === reqId || cr.nomorPermintaan === reqNum);
+
+        let finalStatus = row['Status Approval'] || row['status'] || 'DIAJUKAN';
+        // Jangan timpa status jika lokal sudah disetujui/selesai sedangkan baris spreadsheet belum ter-update
+        if (existing && (existing.status === 'DISETUJUI' || existing.status === 'SELESAI' || existing.status === 'DITOLAK') && finalStatus === 'DIAJUKAN') {
+          finalStatus = existing.status;
+        }
 
         return {
           id: reqId,
-          nomorPermintaan: row['Nomor Permintaan'] || row['nomorPermintaan'] || `REQ-${idx + 1}`,
+          nomorPermintaan: reqNum,
           tanggalPermintaan: row['Tanggal'] || row['tanggalPermintaan'] || nowIso.slice(0, 10),
-          pemohonId: row['ID Pemohon'] || 'USR-001',
-          pemohonNama: row['Nama Pemohon'] || 'Petugas',
-          pemohonNip: row['NIP Pemohon'] || '-',
-          pemohonJabatan: row['Jabatan Pemohon'] || 'Petugas',
-          tempatTugas: row['Nama Gudang Pemohon'] || 'Puskesmas',
+          pemohonId: row['ID Pemohon'] || existing?.pemohonId || 'USR-001',
+          pemohonNama: row['Nama Pemohon'] || existing?.pemohonNama || 'Petugas',
+          pemohonNip: row['NIP Pemohon'] || existing?.pemohonNip || '-',
+          pemohonJabatan: row['Jabatan Pemohon'] || existing?.pemohonJabatan || 'Petugas',
+          tempatTugas: row['Nama Gudang Pemohon'] || existing?.tempatTugas || 'Puskesmas',
           gudangAsalId: 'GUD-001',
           gudangAsalNama: 'Gudang Puskesmas Kepulauan Seribu Selatan',
-          gudangTujuanId: row['ID Gudang Pemohon'] || 'GUD-002',
-          gudangTujuanNama: row['Nama Gudang Pemohon'] || 'Gudang Tujuan',
-          status: row['Status Approval'] || row['status'] || 'DIAJUKAN',
-          catatanPemohon: row['Keperluan'] || '',
-          catatanApproval: row['Catatan Verifikasi'] || '',
-          tanggalApproval: row['Tanggal Approval'] || '',
-          items: items,
-          createdAt: row['Tanggal'] || nowIso,
-          updatedAt: row['Tanggal Approval'] || nowIso
+          gudangTujuanId: row['ID Gudang Pemohon'] || existing?.gudangTujuanId || 'GUD-002',
+          gudangTujuanNama: row['Nama Gudang Pemohon'] || existing?.gudangTujuanNama || 'Gudang Tujuan',
+          status: finalStatus,
+          catatanPemohon: row['Keperluan'] || existing?.catatanPemohon || '',
+          catatanApproval: row['Catatan Verifikasi'] || existing?.catatanApproval || '',
+          tanggalApproval: row['Tanggal Approval'] || existing?.tanggalApproval || '',
+          items: items.length > 0 ? items : (existing?.items || []),
+          createdAt: row['Tanggal'] || existing?.createdAt || nowIso,
+          updatedAt: row['Tanggal Approval'] || existing?.updatedAt || nowIso
         };
       });
 
@@ -2855,6 +2989,11 @@ class StorageService {
       const currentLogos = this.getLogoConfig();
       let updatedLogos = { ...currentLogos };
       let hasLogoChanges = false;
+
+      const currentSheetsCfg = this.getSheetsConfig();
+      let updatedSheetsCfg = { ...currentSheetsCfg };
+      let hasSheetsChanges = false;
+
       sheetData.config.forEach((row: any) => {
         const key = String(row['Kunci Pengaturan (Key)'] || row['key'] || '').trim();
         const val = String(row['Nilai Pengaturan (Value)'] || row['value'] || '').trim();
@@ -2879,10 +3018,22 @@ class StorageService {
         } else if (key === 'LOGO_KONTAK' && val) {
           updatedLogos.kontakPuskesmas = val;
           hasLogoChanges = true;
+        } else if (key === 'WEB_APP_URL' && val && val.startsWith('http')) {
+          updatedSheetsCfg.gasDeploymentUrl = val;
+          hasSheetsChanges = true;
+        } else if (key === 'SPREADSHEET_ID' && val) {
+          updatedSheetsCfg.spreadsheetId = val;
+          hasSheetsChanges = true;
+        } else if (key === 'DRIVE_FOLDER_ID' && val) {
+          updatedSheetsCfg.driveFolderId = val;
+          hasSheetsChanges = true;
         }
       });
       if (hasLogoChanges) {
         this.saveLogoConfig(updatedLogos);
+      }
+      if (hasSheetsChanges) {
+        this.saveSheetsConfig(updatedSheetsCfg);
       }
     }
 

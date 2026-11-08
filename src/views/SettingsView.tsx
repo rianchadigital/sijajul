@@ -26,7 +26,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _currentUser, onRefreshAll }) => {
-  const [activeTab, setActiveTab] = useState<'WHATSAPP_BOT' | 'LOGO_CONFIG' | 'GAS_CONFIG' | 'SCRIPT_CODE' | 'HOSTINGER_DEPLOY' | 'BACKUP'>('WHATSAPP_BOT');
+  const [activeTab, setActiveTab] = useState<'GAS_CONFIG' | 'LOGO_CONFIG' | 'WHATSAPP_BOT' | 'SCRIPT_CODE' | 'HOSTINGER_DEPLOY' | 'BACKUP'>('GAS_CONFIG');
   
   // Feedback Banner / Toast State
   const [actionFeedback, setActionFeedback] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -36,7 +36,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   // GAS Config State
   const [gasConfig, setGasConfig] = useState<GasConfig>({
     webAppUrl: 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec',
-    spreadsheetId: '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs',
+    spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms',
+    driveFolderId: '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk',
     autoSync: true,
     lastSyncTime: '',
     status: 'CONNECTED'
@@ -150,6 +151,110 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       setTimeout(() => setActionFeedback(null), 5000);
     }
   };
+
+  const handleLogoUrlChange = (type: 'JAYA_RAYA' | 'KESEHATAN', rawVal: string) => {
+    let resolved = rawVal.trim();
+    const driveMatch = resolved.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || resolved.match(/id=([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      resolved = `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+    }
+    if (type === 'JAYA_RAYA') {
+      setLogoConfig(prev => ({ ...prev, logoJayaRaya: resolved }));
+      setJayaRayaImgErr(false);
+    } else {
+      setLogoConfig(prev => ({ ...prev, logoKesehatan: resolved }));
+      setKesehatanImgErr(false);
+    }
+  };
+
+  const handleResetJayaRaya = () => {
+    setLogoConfig(prev => ({ ...prev, logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA }));
+    setJayaRayaImgErr(false);
+    setActionFeedback({
+      message: 'Logo Jaya Raya direset ke default resmi DKI Jakarta.',
+      type: 'info'
+    });
+    setTimeout(() => setActionFeedback(null), 3000);
+  };
+
+  const handleResetKesehatan = () => {
+    setLogoConfig(prev => ({ ...prev, logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN }));
+    setKesehatanImgErr(false);
+    setActionFeedback({
+      message: 'Logo Kesehatan direset ke default resmi Bakti Husada.',
+      type: 'info'
+    });
+    setTimeout(() => setActionFeedback(null), 3000);
+  };
+
+  const handleSaveGlobalConfig = async () => {
+    setTesting(true);
+    try {
+      const res = await gasService.saveGlobalConfig(gasConfig, logoConfig);
+      setActionFeedback({
+        message: res.message || 'Konfigurasi global berhasil disimpan!',
+        type: 'success'
+      });
+      onRefreshAll();
+    } catch (e: any) {
+      setActionFeedback({
+        message: `Gagal menyimpan konfigurasi: ${e.message}`,
+        type: 'error'
+      });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setActionFeedback(null), 5000);
+    }
+  };
+
+  const handleTestDriveUpload = async () => {
+    setTesting(true);
+    try {
+      const res = await gasService.testDriveFolderAccess(gasConfig.driveFolderId);
+      setActionFeedback({
+        message: res.message,
+        type: res.success ? 'success' : 'error'
+      });
+    } catch (e: any) {
+      setActionFeedback({
+        message: `Gagal menguji Folder Google Drive: ${e.message}`,
+        type: 'error'
+      });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setActionFeedback(null), 5000);
+    }
+  };
+
+  const handleSetupDatabaseNow = async () => {
+    setTesting(true);
+    try {
+      const res = await gasService.triggerRemoteDatabaseSetup(gasConfig.webAppUrl);
+      setActionFeedback({
+        message: res.message,
+        type: res.success ? 'success' : 'error'
+      });
+      if (res.success) {
+        onRefreshAll();
+      }
+    } catch (e: any) {
+      setActionFeedback({
+        message: `Gagal setup database: ${e.message}`,
+        type: 'error'
+      });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setActionFeedback(null), 5000);
+    }
+  };
+
+  const jayaRayaPreviewSrc = jayaRayaImgErr
+    ? DEFAULT_LOGO_JAYA_RAYA
+    : (logoConfig.logoJayaRaya || EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA);
+
+  const kesehatanPreviewSrc = kesehatanImgErr
+    ? DEFAULT_LOGO_KESEHATAN
+    : (logoConfig.logoKesehatan || EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
 
   const handleSyncAllNow = async () => {
     setTesting(true);
@@ -663,18 +768,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
       {/* Tabs */}
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-px">
         <button
-          onClick={() => setActiveTab('WHATSAPP_BOT')}
+          onClick={() => setActiveTab('GAS_CONFIG')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'WHATSAPP_BOT'
-              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
+            activeTab === 'GAS_CONFIG'
+              ? 'border-teal-800 text-teal-900 bg-teal-50/50 rounded-t-xl'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          <MessageSquare className="w-4 h-4 text-emerald-600" />
-          API WhatsApp & Robot Cek Stok
-          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] rounded-full font-extrabold">
-            Bot AI
-          </span>
+          <Cloud className="w-4 h-4 text-teal-700" />
+          Konfigurasi Spreadsheet &amp; Drive
         </button>
 
         <button
@@ -686,19 +788,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
           }`}
         >
           <ImageIcon className="w-4 h-4 text-teal-700" />
-          Upload Logo & Kop Surat Resmi
+          Upload Logo &amp; Kop Surat Resmi
         </button>
 
         <button
-          onClick={() => setActiveTab('GAS_CONFIG')}
+          onClick={() => setActiveTab('WHATSAPP_BOT')}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
-            activeTab === 'GAS_CONFIG'
-              ? 'border-teal-800 text-teal-900 bg-teal-50/50 rounded-t-xl'
+            activeTab === 'WHATSAPP_BOT'
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/50 rounded-t-xl'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          <Cloud className="w-4 h-4 text-teal-700" />
-          Google Apps Script & Spreadsheet
+          <MessageSquare className="w-4 h-4 text-emerald-600" />
+          API WhatsApp &amp; Robot Cek Stok
+          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] rounded-full font-extrabold">
+            Bot AI
+          </span>
         </button>
 
         <button
@@ -1639,151 +1744,342 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
         </div>
       )}
 
-      {/* TAB 3: GOOGLE APPS SCRIPT CONFIG */}
+      {/* TAB: GOOGLE APPS SCRIPT & SPREADSHEET CONFIG (SESUAI GAMBAR RESMI) */}
       {activeTab === 'GAS_CONFIG' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
-                <Cloud className="w-5 h-5" />
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-6 space-y-6">
+            
+            {/* Header: Konfigurasi Spreadsheet & Google Drive */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-800 flex items-center justify-center font-bold">
+                <Layers className="w-5 h-5 text-teal-700" />
               </div>
+              <h2 className="text-base font-extrabold text-slate-800">
+                Konfigurasi Spreadsheet &amp; Google Drive
+              </h2>
+            </div>
+
+            <div className="space-y-5">
+              {/* Field 1: URL Web App Google Apps Script */}
               <div>
-                <h2 className="text-base font-extrabold text-slate-900">
-                  Integrasi Google Apps Script (GAS)
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Sinkronisasi database barang, dropping, dan mutasi dengan Google Spreadsheet Anda secara gratis tanpa database berbayar.
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  URL Web App Google Apps Script (Akhiran /exec) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  value={gasConfig.webAppUrl}
+                  onChange={(e) => setGasConfig({ ...gasConfig, webAppUrl: e.target.value })}
+                  placeholder="https://script.google.com/macros/s/AKfycbzaDgad9O3nMyEjlydjwvgmeL9oPNKZh-.../exec"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none transition-all shadow-2xs"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Didapatkan setelah menerapkan skrip sebagai Web App dengan akses &quot;Anyone&quot;.
                 </p>
               </div>
-            </div>
-            <div className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-              gasConfig.status === 'CONNECTED' 
-                ? 'bg-emerald-100 text-emerald-800' 
-                : 'bg-slate-100 text-slate-600'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${gasConfig.status === 'CONNECTED' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-              {gasConfig.status === 'CONNECTED' ? 'Tersambung (Online)' : 'Belum Terhubung'}
-            </div>
-          </div>
 
-          <form onSubmit={handleSaveGasConfig} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                URL Aplikasi Web Google Apps Script (Web App URL)
-              </label>
-              <input
-                type="url"
-                value={gasConfig.webAppUrl}
-                onChange={(e) => setGasConfig({ ...gasConfig, webAppUrl: e.target.value })}
-                placeholder="https://script.google.com/macros/s/.../exec"
-                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">
-                URL yang didapatkan setelah melakukan deployment 'New Deployment' &gt; 'Web App' di Google Apps Script.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                ID Google Spreadsheet (Opsional untuk Catatan)
-              </label>
-              <input
-                type="text"
-                value={gasConfig.spreadsheetId || ''}
-                onChange={(e) => setGasConfig({ ...gasConfig, spreadsheetId: e.target.value })}
-                placeholder="Contoh: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
-                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none"
-              />
-            </div>
-
-            <div className="pt-2 bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-2">
-              <label className="flex items-start gap-2.5 text-xs text-slate-800 cursor-pointer">
+              {/* Field 2: ID Google Spreadsheet (Opsional) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ID Google Spreadsheet (Opsional)
+                </label>
                 <input
-                  type="checkbox"
-                  checked={gasConfig.autoSync}
-                  onChange={(e) => setGasConfig({ ...gasConfig, autoSync: e.target.checked })}
-                  className="rounded text-teal-800 focus:ring-teal-700 w-4 h-4 mt-0.5"
+                  type="text"
+                  value={gasConfig.spreadsheetId || ''}
+                  onChange={(e) => setGasConfig({ ...gasConfig, spreadsheetId: e.target.value })}
+                  placeholder="1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none transition-all shadow-2xs"
                 />
+              </div>
+
+              {/* Field 3: ID Folder Google Drive */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    ID Folder Google Drive untuk Penyimpanan Foto <span className="text-rose-500">*</span>
+                  </label>
+                  <a
+                    href={`https://drive.google.com/drive/folders/${gasConfig.driveFolderId || '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 underline underline-offset-2"
+                  >
+                    Buka Folder Drive <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+                <input
+                  type="text"
+                  value={gasConfig.driveFolderId || ''}
+                  onChange={(e) => setGasConfig({ ...gasConfig, driveFolderId: e.target.value })}
+                  placeholder="1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk"
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-teal-700 focus:outline-none transition-all shadow-2xs"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Seluruh foto dokumentasi makanan yang diambil oleh pramusaji/PJLP saat penyajian ke pasien akan otomatis masuk ke folder Google Drive ini.
+                </p>
+              </div>
+
+              {/* SUB-CARD: Logo Kop Surat Resmi Dokumen (DKI Jakarta & Kemenkes) */}
+              <div className="rounded-2xl border border-teal-200/90 bg-teal-50/20 p-4 sm:p-5 space-y-4">
                 <div>
-                  <span className="font-extrabold text-emerald-950 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                    Aktifkan Sinkronisasi Otomatis Real-Time (Tanpa Perlu Klik Tombol)
-                  </span>
-                  <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
-                    Setiap transaksi, permohonan usulan, dropping, atau penerimaan akan otomatis dikirim ke Google Spreadsheet. Aplikasi juga secara berkala mengecek dan memperbarui data terbaru di latar belakang secara mulus.
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-teal-700" />
+                    <h3 className="text-sm font-extrabold text-slate-800">
+                      Logo Kop Surat Resmi Dokumen (DKI Jakarta &amp; Kemenkes)
+                    </h3>
+                  </div>
+                  <div className="mt-1.5">
+                    <span className="inline-block px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-bold">
+                      Tersimpan Global &amp; Tampil di Semua Cetak PDF
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                    Kedua logo ini akan otomatis dicetak pada Kop Surat Berita Acara Serah Terima (BAST - GIZI), Bukti Penyerahan Pasien (BPM - GIZI), dan Rekap Tagihan. Anda dapat memasukkan link URL langsung atau link Google Drive asset (contoh: drive.google.com/file/d/ID/view).
                   </p>
                 </div>
-              </label>
-            </div>
 
-            {testResult && (
-              <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${
-                testResult.success 
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
-                  : 'bg-rose-50 text-rose-800 border border-rose-200'
-              }`}>
-                {testResult.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                )}
-                <div>
-                  <div className="font-bold">{testResult.success ? 'Koneksi Berhasil!' : 'Koneksi Gagal'}</div>
-                  <div className="text-[11px] mt-0.5">{testResult.message}</div>
+                {/* 2 Kolom Kiri & Kanan */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  {/* Kolom 1: Jaya Raya */}
+                  <div className="bg-white rounded-xl border border-teal-200 p-3.5 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        1. Logo Jaya Raya DKI Jakarta (Kiri Kop)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResetJayaRaya}
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-1 cursor-pointer"
+                      >
+                        Reset Default Resmi
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={logoConfig.logoJayaRaya}
+                      onChange={(e) => handleLogoUrlChange('JAYA_RAYA', e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..."
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-slate-700 focus:bg-white focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    />
+
+                    <div className="flex items-center gap-3 p-2 bg-slate-50/80 rounded-lg border border-slate-200/80">
+                      <div className="w-12 h-12 bg-white rounded-lg border border-slate-200 flex items-center justify-center p-1 flex-shrink-0">
+                        <img
+                          src={jayaRayaPreviewSrc}
+                          alt="Logo DKI Jakarta"
+                          className="w-10 h-10 object-contain"
+                          onError={() => setJayaRayaImgErr(true)}
+                        />
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        <div className="font-bold text-slate-800">Pratinjau Logo DKI Jakarta</div>
+                        <div className="text-[11px] text-slate-500">Tampil pada sisi kiri kop surat resmi Puskesmas.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kolom 2: Kemenkes */}
+                  <div className="bg-white rounded-xl border border-teal-200 p-3.5 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">
+                        2. Logo Kesehatan / Kemenkes RI (Kanan Kop)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResetKesehatan}
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-1 cursor-pointer"
+                      >
+                        Reset Default Resmi
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={logoConfig.logoKesehatan}
+                      onChange={(e) => handleLogoUrlChange('KESEHATAN', e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..."
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-slate-700 focus:bg-white focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    />
+
+                    <div className="flex items-center gap-3 p-2 bg-slate-50/80 rounded-lg border border-slate-200/80">
+                      <div className="w-12 h-12 bg-white rounded-lg border border-slate-200 flex items-center justify-center p-1 flex-shrink-0">
+                        <img
+                          src={kesehatanPreviewSrc}
+                          alt="Logo Kemenkes RI"
+                          className="w-10 h-10 object-contain"
+                          onError={() => setKesehatanImgErr(true)}
+                        />
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        <div className="font-bold text-slate-800">Pratinjau Logo Kemenkes RI</div>
+                        <div className="text-[11px] text-slate-500">Tampil pada sisi kanan kop surat resmi Puskesmas.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SIMULASI TAMPILAN KOP SURAT CETAK (A4 PDF) */}
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    SIMULASI TAMPILAN KOP SURAT CETAK (A4 PDF):
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-300 p-4 shadow-2xs">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="w-14 h-14 flex-shrink-0 flex items-center justify-center">
+                        <img
+                          src={jayaRayaPreviewSrc}
+                          alt="DKI Jakarta"
+                          className="w-14 h-14 object-contain"
+                        />
+                      </div>
+
+                      <div className="text-center flex-1">
+                        <div className="text-xs font-black text-slate-900 uppercase">
+                          PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA
+                        </div>
+                        <div className="text-xs font-extrabold text-slate-800 uppercase">
+                          DINAS KESEHATAN KABUPATEN ADMINISTRASI KEPULAUAN SERIBU
+                        </div>
+                        <div className="text-sm font-black text-slate-900 uppercase">
+                          PUSKESMAS KEPULAUAN SERIBU SELATAN
+                        </div>
+                        <div className="text-[10px] text-slate-600 mt-0.5">
+                          Jl. Dermaga Pelabuhan Utama No. 4, Pulau Tidung - Telp: (021) 645-8901
+                        </div>
+                      </div>
+
+                      <div className="w-14 h-14 flex-shrink-0 flex items-center justify-center">
+                        <img
+                          src={kesehatanPreviewSrc}
+                          alt="Bakti Husada"
+                          className="w-14 h-14 object-contain"
+                        />
+                      </div>
+                    </div>
+                    <div className="h-[2px] bg-slate-900 mt-3"></div>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div className="flex flex-wrap gap-2.5 pt-2">
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-xs"
-              >
-                Simpan Pengaturan GAS
-              </button>
+              {/* ACTION BUTTONS (ROW OF 3 BUTTONS) */}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveGlobalConfig}
+                  disabled={testing}
+                  className="px-5 py-2.5 bg-teal-900 hover:bg-teal-950 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Simpan Konfigurasi Global</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handleTestGasConnection}
-                disabled={testing || !gasConfig.webAppUrl}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors border border-slate-300 flex items-center gap-1.5"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
-                {testing ? 'Menguji...' : 'Uji Koneksi'}
-              </button>
+                <button
+                  type="button"
+                  onClick={handleTestGasConnection}
+                  disabled={testing || !gasConfig.webAppUrl}
+                  className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-colors border border-slate-300 shadow-2xs flex items-center gap-2 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+                  <span>Uji Koneksi GAS</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handlePullRealDataFromSheets}
-                disabled={testing || !gasConfig.webAppUrl}
-                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5"
-                title="Tarik data real dari Google Spreadsheet dan perbarui master barang serta stok"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Tarik Data Real dari Spreadsheet (Pull Real Data)
-              </button>
+                <button
+                  type="button"
+                  onClick={handleTestDriveUpload}
+                  disabled={testing}
+                  className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-xl text-xs font-bold transition-colors border border-blue-200 shadow-2xs flex items-center gap-2 cursor-pointer"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>Uji Upload Drive</span>
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={handleSyncAllNow}
-                disabled={testing || !gasConfig.webAppUrl}
-                className="px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-xs font-bold transition-colors border border-teal-200 flex items-center gap-1.5"
-              >
-                <Cloud className="w-3.5 h-3.5" />
-                Kirim Data Lokal ke Spreadsheet (Push)
-              </button>
+              {/* CARD: 1-KLIK Setup Database Otomatis di Google Sheets */}
+              <div className="rounded-2xl border border-teal-200/90 bg-teal-50/20 p-4 sm:p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-teal-900 text-white rounded-md text-[10px] font-black tracking-wide">
+                    1-KLIK
+                  </span>
+                  <h3 className="text-sm font-extrabold text-slate-800">
+                    Setup Database Otomatis di Google Sheets
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Inisialisasi seluruh tabel database (MealOrders, Patients, Users, Menus, DietTypes, Providers, AuditLogs, AppSettings) langsung di spreadsheet Anda secara otomatis tanpa perlu setup manual.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleSetupDatabaseNow}
+                  disabled={testing || !gasConfig.webAppUrl}
+                  className="w-full py-2.5 px-4 bg-teal-900 hover:bg-teal-950 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>⚡ Setup Database Google Sheets Sekarang</span>
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={handleClearDummyData}
-                className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-colors border border-amber-300 flex items-center gap-1.5"
-                title="Bersihkan transaksi dummy/contoh agar data murni dari Spreadsheet"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-amber-700" />
-                Bersihkan Seluruh Data Dummy
-              </button>
+              {/* STATUS INDICATORS */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs py-2 px-1 text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="font-semibold">Auto-Refresh &amp; Sinkronisasi (Setiap 3 Detik):</span>
+                  </div>
+                  <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full text-xs">
+                    ✓ Aktif (Setiap 3 Detik)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="font-extrabold text-emerald-950">
+                      Auto-Sync Realtime Aktif: Setiap Tambah Pasien &amp; Order Langsung Tersimpan
+                    </span>
+                    <p className="text-emerald-800 mt-0.5">
+                      Seluruh mutasi stok, penerimaan barang, permohonan dropping, serta perubahan pengaturan logo otomatis tersimpan permanen ke Google Spreadsheet dan dapat diakses dari browser mana pun tanpa mengulang pengaturan.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Sync & Pull Buttons */}
+              <div className="flex flex-wrap gap-2.5 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={handlePullRealDataFromSheets}
+                  disabled={testing || !gasConfig.webAppUrl}
+                  className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  title="Tarik data real dari Google Spreadsheet dan perbarui master barang serta stok"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Tarik Data Real dari Spreadsheet (Pull Real Data)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSyncAllNow}
+                  disabled={testing || !gasConfig.webAppUrl}
+                  className="px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-xs font-bold transition-colors border border-teal-200 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Kirim Data Lokal ke Spreadsheet (Push)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearDummyData}
+                  className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl text-xs font-bold transition-colors border border-amber-300 flex items-center gap-1.5 cursor-pointer"
+                  title="Bersihkan transaksi dummy/contoh agar data murni dari Spreadsheet"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Bersihkan Seluruh Data Dummy</span>
+                </button>
+              </div>
+
             </div>
-          </form>
+          </div>
         </div>
       )}
 

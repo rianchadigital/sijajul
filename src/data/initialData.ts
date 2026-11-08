@@ -325,6 +325,7 @@ export const DEFAULT_NUMBER_CONFIG: NumberFormatConfig = {
 export const DEFAULT_SHEETS_CONFIG: GoogleSheetsConfig = {
   spreadsheetId: '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs',
   gasDeploymentUrl: 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec',
+  driveFolderId: '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk',
   autoSync: true,
   isConnected: true
 };

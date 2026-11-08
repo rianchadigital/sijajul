@@ -56,17 +56,70 @@ export const DEFAULT_LOGO_KESEHATAN = `data:image/svg+xml;utf8,<svg xmlns="http:
  * ID: 1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5 (logo kesehatan dan logo jaya raya)
  */
 export const DEFAULT_DRIVE_ASSET_ID = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
+export const DEFAULT_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
+export const DEFAULT_DRIVE_FILE_URL = 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view';
 
 export const EMBEDDED_LINK_LOGO_JAYA_RAYA = '/images/logo_jaya_raya.svg';
 export const EMBEDDED_LINK_LOGO_KESEHATAN = '/images/logo_kesehatan.svg';
 
+export const extractDriveFileId = (urlOrId?: string): string | null => {
+  if (!urlOrId) return null;
+  const str = String(urlOrId).trim();
+  // Valid alphanumeric Google Drive ID
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(str)) {
+    return str;
+  }
+  const folderMatch = str.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch && folderMatch[1]) return folderMatch[1];
+
+  const fileMatch = str.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch && fileMatch[1]) return fileMatch[1];
+
+  const idMatch = str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) return idMatch[1];
+
+  return null;
+};
+
 export const getGoogleDriveImageUrl = (fileId: string = DEFAULT_DRIVE_ASSET_ID): string => {
-  if (!fileId) return '';
-  return `https://lh3.googleusercontent.com/d/${fileId}`;
+  const cleanId = extractDriveFileId(fileId) || fileId;
+  if (!cleanId) return '';
+  return `https://lh3.googleusercontent.com/d/${cleanId}`;
 };
 
 export const getGoogleDriveThumbnailUrl = (fileId: string = DEFAULT_DRIVE_ASSET_ID, size: number = 800): string => {
-  if (!fileId) return '';
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`;
+  const cleanId = extractDriveFileId(fileId) || fileId;
+  if (!cleanId) return '';
+  return `https://drive.google.com/thumbnail?id=${cleanId}&sz=w${size}`;
+};
+
+export const resolveLogoImageSrc = (
+  logoInput?: string,
+  fallbackType: 'JAYA_RAYA' | 'KESEHATAN' = 'JAYA_RAYA'
+): string => {
+  const defaultFallback = fallbackType === 'JAYA_RAYA'
+    ? (EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA)
+    : (EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
+
+  if (!logoInput || !String(logoInput).trim()) {
+    return defaultFallback;
+  }
+
+  const trimmed = String(logoInput).trim();
+  const driveId = extractDriveFileId(trimmed);
+  if (driveId) {
+    return `https://lh3.googleusercontent.com/d/${driveId}`;
+  }
+
+  if (
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/')
+  ) {
+    return trimmed;
+  }
+
+  return defaultFallback;
 };
 

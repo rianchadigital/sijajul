@@ -17,7 +17,8 @@ import {
   EMBEDDED_LINK_LOGO_JAYA_RAYA,
   EMBEDDED_LINK_LOGO_KESEHATAN,
   DEFAULT_LOGO_JAYA_RAYA,
-  DEFAULT_LOGO_KESEHATAN
+  DEFAULT_LOGO_KESEHATAN,
+  resolveLogoImageSrc
 } from '../data/defaultLogos';
 
 interface SettingsViewProps {
@@ -61,15 +62,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
     lastTestMessage: ''
   });
 
-  // Logo & Kop Surat Config State
+  // Logo & Kop Surat Config State (Permanently saved to Google Drive & Google Sheets CONFIG_SISTEM)
   const [logoConfig, setLogoConfig] = useState<AppLogoConfig>({
-    logoJayaRaya: '',
-    logoKesehatan: '',
+    logoJayaRaya: 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view',
+    logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+    driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
     namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
-    namaDinas: 'DINAS KESEHATAN',
+    namaDinas: 'DINAS KESEHATAN KABUPATEN ADMINISTRASI KEPULAUAN SERIBU',
     namaPuskesmas: 'PUSKESMAS KECAMATAN KEPULAUAN SERIBU SELATAN',
-    alamatPuskesmas: 'Jl. Pantai Selatan No. 1, Pulau Tidung, Kepulauan Seribu Selatan, DKI Jakarta 14520',
-    kontakPuskesmas: 'Telepon: (021) 6411234 | Email: puskesmas.kepseribuselatan@jakarta.go.id | Web: puskesmas-kss.jakarta.go.id'
+    alamatPuskesmas: 'Jl. Dermaga Pelabuhan Utama No. 4, Pulau Tidung - Telp: (021) 645-8901',
+    kontakPuskesmas: 'Telepon: (021) 645-8901 | Email: puskesmas.kepseribuselatan@jakarta.go.id'
   });
 
   // Bot Simulator Interactive State
@@ -115,8 +117,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   const handleSaveGasConfig = (e: React.FormEvent) => {
     e.preventDefault();
     gasService.saveConfig(gasConfig);
+    storageService.saveLogoConfig(logoConfig);
     setActionFeedback({
-      message: 'Pengaturan integrasi Google Apps Script & Spreadsheet berhasil disimpan!',
+      message: 'Pengaturan integrasi Google Apps Script, Spreadsheet, dan Logo Kop Surat berhasil disimpan!',
       type: 'success'
     });
     setTimeout(() => setActionFeedback(null), 4000);
@@ -153,11 +156,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   };
 
   const handleLogoUrlChange = (type: 'JAYA_RAYA' | 'KESEHATAN', rawVal: string) => {
-    let resolved = rawVal.trim();
-    const driveMatch = resolved.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || resolved.match(/id=([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      resolved = `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-    }
+    const resolved = rawVal.trim();
     if (type === 'JAYA_RAYA') {
       setLogoConfig(prev => ({ ...prev, logoJayaRaya: resolved }));
       setJayaRayaImgErr(false);
@@ -168,20 +167,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   };
 
   const handleResetJayaRaya = () => {
-    setLogoConfig(prev => ({ ...prev, logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA }));
+    const defaultVal = 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view';
+    setLogoConfig(prev => ({ ...prev, logoJayaRaya: defaultVal }));
     setJayaRayaImgErr(false);
     setActionFeedback({
-      message: 'Logo Jaya Raya direset ke default resmi DKI Jakarta.',
+      message: 'Logo Jaya Raya direset ke default resmi Google Drive (1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5).',
       type: 'info'
     });
     setTimeout(() => setActionFeedback(null), 3000);
   };
 
   const handleResetKesehatan = () => {
-    setLogoConfig(prev => ({ ...prev, logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN }));
+    const defaultVal = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
+    setLogoConfig(prev => ({ ...prev, logoKesehatan: defaultVal }));
     setKesehatanImgErr(false);
     setActionFeedback({
-      message: 'Logo Kesehatan direset ke default resmi Bakti Husada.',
+      message: 'Logo Kesehatan direset ke default resmi Google Drive (1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5).',
       type: 'info'
     });
     setTimeout(() => setActionFeedback(null), 3000);
@@ -190,16 +191,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   const handleSaveGlobalConfig = async () => {
     setTesting(true);
     try {
+      gasService.saveConfig(gasConfig);
+      storageService.saveLogoConfig(logoConfig);
       const res = await gasService.saveGlobalConfig(gasConfig, logoConfig);
       setActionFeedback({
-        message: res.message || 'Konfigurasi global berhasil disimpan!',
+        message: res.message || 'Konfigurasi global dan Logo Kop Surat berhasil disimpan!',
         type: 'success'
       });
       onRefreshAll();
     } catch (e: any) {
       setActionFeedback({
-        message: `Gagal menyimpan konfigurasi: ${e.message}`,
-        type: 'error'
+        message: `Konfigurasi disimpan secara lokal: ${e.message}`,
+        type: 'info'
       });
     } finally {
       setTesting(false);
@@ -250,11 +253,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
 
   const jayaRayaPreviewSrc = jayaRayaImgErr
     ? DEFAULT_LOGO_JAYA_RAYA
-    : (logoConfig.logoJayaRaya || EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA);
+    : resolveLogoImageSrc(logoConfig.logoJayaRaya, 'JAYA_RAYA');
 
   const kesehatanPreviewSrc = kesehatanImgErr
     ? DEFAULT_LOGO_KESEHATAN
-    : (logoConfig.logoKesehatan || EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
+    : resolveLogoImageSrc(logoConfig.logoKesehatan, 'KESEHATAN');
 
   const handleSyncAllNow = async () => {
     setTesting(true);
@@ -1372,7 +1375,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner relative">
                       <img 
-                        src={(!jayaRayaImgErr && logoConfig.logoJayaRaya) ? logoConfig.logoJayaRaya : (EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA)} 
+                        src={jayaRayaImgErr ? DEFAULT_LOGO_JAYA_RAYA : resolveLogoImageSrc(logoConfig.logoJayaRaya, 'JAYA_RAYA')} 
                         alt="Logo Jaya Raya" 
                         className="w-full h-full object-contain"
                         referrerPolicy="no-referrer"
@@ -1506,7 +1509,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 p-2 shadow-inner relative">
                       <img 
-                        src={(!kesehatanImgErr && logoConfig.logoKesehatan) ? logoConfig.logoKesehatan : (EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN)} 
+                        src={kesehatanImgErr ? DEFAULT_LOGO_KESEHATAN : resolveLogoImageSrc(logoConfig.logoKesehatan, 'KESEHATAN')} 
                         alt="Logo Kesehatan" 
                         className="w-full h-full object-contain"
                         referrerPolicy="no-referrer"

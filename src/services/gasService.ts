@@ -53,7 +53,7 @@ var CONFIG = {
   APP_SHORT_NAME: "SI JAJUL",
   APP_VERSION: "2.7.0",
   INSTANSI: "Puskesmas Kecamatan Kepulauan Seribu Selatan",
-  SPREADSHEET_ID: "1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs",
+  SPREADSHEET_ID: "1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms",
   TIMEZONE: "Asia/Jakarta",
   HEADER_BG_COLOR: "#005e54", // Hijau Puskesmas / Teal Tua Resmi
   HEADER_FONT_COLOR: "#ffffff",
@@ -64,7 +64,7 @@ var CONFIG = {
  * Mendapatkan referensi Spreadsheet aktif (mendukung container-bound & standalone Web App)
  */
 function getSpreadsheet() {
-  var targetId = CONFIG.SPREADSHEET_ID || "1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs";
+  var targetId = CONFIG.SPREADSHEET_ID || "1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms";
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss && ss.getId()) return ss;

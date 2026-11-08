@@ -323,9 +323,9 @@ export const DEFAULT_NUMBER_CONFIG: NumberFormatConfig = {
 
 // Konfigurasi Google Apps Script & Spreadsheet Aktif dari User
 export const DEFAULT_SHEETS_CONFIG: GoogleSheetsConfig = {
-  spreadsheetId: '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs',
+  spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms',
   gasDeploymentUrl: 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec',
-  driveFolderId: '1xsrknKxLZVC-YryvoTCbavbUKEn4EwLk',
+  driveFolderId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
   autoSync: true,
   isConnected: true
 };

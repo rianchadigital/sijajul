@@ -39,11 +39,11 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
 };
 
 export const DEFAULT_LOGO_CONFIG: AppLogoConfig = {
-  logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA,
-  logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN,
-  driveAssetId: DEFAULT_DRIVE_ASSET_ID,
-  driveAssetUrl: getGoogleDriveThumbnailUrl(DEFAULT_DRIVE_ASSET_ID, 800),
-  useDriveAsset: false,
+  logoJayaRaya: 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view',
+  logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+  driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+  driveAssetUrl: getGoogleDriveThumbnailUrl('1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5', 800),
+  useDriveAsset: true,
   namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
   namaDinas: 'DINAS KESEHATAN',
   namaPuskesmas: 'PUSKESMAS KECAMATAN KEPULAUAN SERIBU SELATAN',
@@ -2529,18 +2529,17 @@ class StorageService {
   getLogoConfig(): AppLogoConfig {
     const cfg = this.getItem<AppLogoConfig>(STORAGE_KEYS.LOGO_CONFIG, DEFAULT_LOGO_CONFIG);
     let modified = false;
-    // Otomatis ganti jika link sebelumnya adalah thumbnail drive yang terblokir login
-    const isRestrictedDriveUrl = (url?: string) => {
-      if (!url) return true;
-      return url.includes('drive.google.com/thumbnail?id=1sx65Ff') || url.includes('lh3.googleusercontent.com/d/1sx65Ff');
-    };
 
-    if (!cfg.logoJayaRaya || isRestrictedDriveUrl(cfg.logoJayaRaya)) {
-      cfg.logoJayaRaya = EMBEDDED_LINK_LOGO_JAYA_RAYA;
+    if (!cfg.logoJayaRaya) {
+      cfg.logoJayaRaya = DEFAULT_LOGO_CONFIG.logoJayaRaya;
       modified = true;
     }
-    if (!cfg.logoKesehatan || isRestrictedDriveUrl(cfg.logoKesehatan)) {
-      cfg.logoKesehatan = EMBEDDED_LINK_LOGO_KESEHATAN;
+    if (!cfg.logoKesehatan) {
+      cfg.logoKesehatan = DEFAULT_LOGO_CONFIG.logoKesehatan;
+      modified = true;
+    }
+    if (!cfg.driveAssetId) {
+      cfg.driveAssetId = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
       modified = true;
     }
     if (modified) {
@@ -3088,22 +3087,23 @@ class StorageService {
         });
         this.saveItems(items);
 
-        // Pasang konfigurasi logo resmi bawaan yang tersemat secara global di semua browser
+        // Pasang konfigurasi logo resmi Google Drive yang tersimpan secara global di semua browser
         const currentLogo = this.getLogoConfig();
         this.saveLogoConfig({
           ...currentLogo,
-          logoJayaRaya: EMBEDDED_LINK_LOGO_JAYA_RAYA,
-          logoKesehatan: EMBEDDED_LINK_LOGO_KESEHATAN,
-          driveAssetId: DEFAULT_DRIVE_ASSET_ID,
-          useDriveAsset: false
+          logoJayaRaya: 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view',
+          logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          useDriveAsset: true
         });
 
         // Pastikan konfigurasi Google Spreadsheet & GAS terpasang aktif
         const targetGasUrl = 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec';
-        const targetSpreadsheetId = '1L2D_5jHPQibHovZEPOW6kJdgGHILFbp3_AImlh6pvAs';
+        const targetSpreadsheetId = '1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms';
         const cfg = this.getSheetsConfig();
         cfg.spreadsheetId = targetSpreadsheetId;
         cfg.gasDeploymentUrl = targetGasUrl;
+        cfg.driveFolderId = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
         cfg.autoSync = true;
         cfg.isConnected = true;
         this.saveSheetsConfig(cfg);

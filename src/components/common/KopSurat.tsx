@@ -3,8 +3,7 @@ import { storageService } from '../../services/storageService';
 import { 
   DEFAULT_LOGO_JAYA_RAYA, 
   DEFAULT_LOGO_KESEHATAN, 
-  EMBEDDED_LINK_LOGO_JAYA_RAYA,
-  EMBEDDED_LINK_LOGO_KESEHATAN
+  resolveLogoImageSrc
 } from '../../data/defaultLogos';
 
 export const KopSurat: React.FC = () => {
@@ -14,11 +13,11 @@ export const KopSurat: React.FC = () => {
 
   const jayaRayaSrc = jayaRayaError 
     ? DEFAULT_LOGO_JAYA_RAYA 
-    : (logoConfig.logoJayaRaya || EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA);
+    : resolveLogoImageSrc(logoConfig.logoJayaRaya, 'JAYA_RAYA');
 
   const kesehatanSrc = kesehatanError 
     ? DEFAULT_LOGO_KESEHATAN 
-    : (logoConfig.logoKesehatan || EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
+    : resolveLogoImageSrc(logoConfig.logoKesehatan, 'KESEHATAN');
 
   return (
     <div id="kop-surat-puskesmas" className="border-b-2 border-teal-800 pb-3 mb-6">

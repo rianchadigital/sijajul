@@ -886,8 +886,8 @@ function saveSingleItemToSheet(item, initialStock) {
   } catch(e) {}
 
   return foundRow !== -1 
-    ? "Barang \"" + item.namaBarang + "\" berhasil diperbarui di Spreadsheet (baris " + foundRow + ")"
-    : "Barang baru \"" + item.namaBarang + "\" berhasil ditambahkan ke Spreadsheet";
+    ? ('Barang "' + item.namaBarang + '" berhasil diperbarui di Spreadsheet (baris ' + foundRow + ')')
+    : ('Barang baru "' + item.namaBarang + '" berhasil ditambahkan ke Spreadsheet');
 }
 
 function deleteSingleItemFromSheet(itemId) {

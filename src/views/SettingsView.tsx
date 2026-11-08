@@ -64,7 +64,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
 
   // Logo & Kop Surat Config State (Permanently saved to Google Drive & Google Sheets CONFIG_SISTEM)
   const [logoConfig, setLogoConfig] = useState<AppLogoConfig>({
-    logoJayaRaya: 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view',
+    logoJayaRaya: 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
     logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
     driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
     namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
@@ -167,11 +167,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
   };
 
   const handleResetJayaRaya = () => {
-    const defaultVal = 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view';
+    const defaultVal = 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
     setLogoConfig(prev => ({ ...prev, logoJayaRaya: defaultVal }));
     setJayaRayaImgErr(false);
     setActionFeedback({
-      message: 'Logo Jaya Raya direset ke default resmi Google Drive (1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5).',
+      message: 'Logo Jaya Raya direset ke link Google Drive resmi (1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5).',
       type: 'info'
     });
     setTimeout(() => setActionFeedback(null), 3000);
@@ -1395,9 +1395,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
                             <Check className="w-3 h-3" /> Link Bawaan Global (Aktif)
                           </span>
-                        ) : logoConfig.logoJayaRaya.includes('drive.google.com') ? (
-                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold">
-                            📁 Link Google Drive
+                        ) : (logoConfig.logoJayaRaya.includes('drive.google.com') || logoConfig.logoJayaRaya.includes('1sx65Ff')) ? (
+                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                            <Check className="w-3 h-3 text-teal-600" /> 📁 Link Google Drive Permanen (Aktif)
                           </span>
                         ) : logoConfig.logoJayaRaya.startsWith('data:') ? (
                           <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-semibold">
@@ -1529,9 +1529,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
                             <Check className="w-3 h-3" /> Link Bawaan Global (Aktif)
                           </span>
-                        ) : logoConfig.logoKesehatan.includes('drive.google.com') ? (
-                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold">
-                            📁 Link Google Drive
+                        ) : (logoConfig.logoKesehatan.includes('drive.google.com') || logoConfig.logoKesehatan.includes('1sx65Ff')) ? (
+                          <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1">
+                            <Check className="w-3 h-3 text-teal-600" /> 📁 Link Google Drive Permanen (Aktif)
                           </span>
                         ) : logoConfig.logoKesehatan.startsWith('data:') ? (
                           <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-semibold">
@@ -1861,7 +1861,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                       type="text"
                       value={logoConfig.logoJayaRaya}
                       onChange={(e) => handleLogoUrlChange('JAYA_RAYA', e.target.value)}
-                      placeholder="https://drive.google.com/file/d/..."
+                      placeholder="https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5"
                       className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-slate-700 focus:bg-white focus:ring-1 focus:ring-teal-700 focus:outline-none"
                     />
 
@@ -1900,7 +1900,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser: _curren
                       type="text"
                       value={logoConfig.logoKesehatan}
                       onChange={(e) => handleLogoUrlChange('KESEHATAN', e.target.value)}
-                      placeholder="https://drive.google.com/file/d/..."
+                      placeholder="1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5"
                       className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-slate-700 focus:bg-white focus:ring-1 focus:ring-teal-700 focus:outline-none"
                     />
 

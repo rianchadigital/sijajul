@@ -39,16 +39,16 @@ export const DEFAULT_WHATSAPP_CONFIG: WhatsappConfig = {
 };
 
 export const DEFAULT_LOGO_CONFIG: AppLogoConfig = {
-  logoJayaRaya: 'https://drive.google.com/file/d/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5/view',
+  logoJayaRaya: 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
   logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
   driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
   driveAssetUrl: getGoogleDriveThumbnailUrl('1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5', 800),
   useDriveAsset: true,
   namaPemprov: 'PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA',
-  namaDinas: 'DINAS KESEHATAN',
+  namaDinas: 'DINAS KESEHATAN KABUPATEN ADMINISTRASI KEPULAUAN SERIBU',
   namaPuskesmas: 'PUSKESMAS KECAMATAN KEPULAUAN SERIBU SELATAN',
-  alamatPuskesmas: 'Jl. Pantai Selatan No. 1, Pulau Tidung, Kepulauan Seribu Selatan, DKI Jakarta 14520',
-  kontakPuskesmas: 'Telepon: (021) 6411234 | Email: puskesmas.kepseribuselatan@jakarta.go.id | Web: puskesmas-kss.jakarta.go.id'
+  alamatPuskesmas: 'Jl. Dermaga Pelabuhan Utama No. 4, Pulau Tidung - Telp: (021) 645-8901',
+  kontakPuskesmas: 'Telepon: (021) 645-8901 | Email: puskesmas.kepseribuselatan@jakarta.go.id'
 };
 
 const STORAGE_KEYS = {
@@ -2530,15 +2530,16 @@ class StorageService {
     const cfg = this.getItem<AppLogoConfig>(STORAGE_KEYS.LOGO_CONFIG, DEFAULT_LOGO_CONFIG);
     let modified = false;
 
-    if (!cfg.logoJayaRaya) {
-      cfg.logoJayaRaya = DEFAULT_LOGO_CONFIG.logoJayaRaya;
+    // Pastikan link Google Drive resmi 1sx65Ff selalu aktif dan tersimpan permanen
+    if (!cfg.logoJayaRaya || cfg.logoJayaRaya === '/images/logo_jaya_raya.svg' || !cfg.logoJayaRaya.includes('1sx65Ff')) {
+      cfg.logoJayaRaya = 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
       modified = true;
     }
-    if (!cfg.logoKesehatan) {
-      cfg.logoKesehatan = DEFAULT_LOGO_CONFIG.logoKesehatan;
+    if (!cfg.logoKesehatan || cfg.logoKesehatan === '/images/logo_kesehatan.svg' || !cfg.logoKesehatan.includes('1sx65Ff')) {
+      cfg.logoKesehatan = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
       modified = true;
     }
-    if (!cfg.driveAssetId) {
+    if (!cfg.driveAssetId || cfg.driveAssetId !== '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5') {
       cfg.driveAssetId = '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5';
       modified = true;
     }
@@ -3110,6 +3111,34 @@ class StorageService {
 
         localStorage.setItem('sijajul_purge_demo_transactions_and_requests_v21', 'true');
         window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+      }
+
+      // Pastikan konfigurasi Logo Drive resmi 1sx65Ff & Google Spreadsheet tersimpan permanen di semua browser
+      const logoDriveFlag = localStorage.getItem('sijajul_drive_logos_permanen_v28');
+      if (!logoDriveFlag) {
+        const curLogo = this.getLogoConfig();
+        this.saveLogoConfig({
+          ...curLogo,
+          logoJayaRaya: 'https://drive.google.com/drive/u/0/folders/1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          logoKesehatan: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          driveAssetId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          useDriveAsset: true
+        });
+
+        const curSheets = this.getSheetsConfig();
+        this.saveSheetsConfig({
+          ...curSheets,
+          spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZ_jgnUUqptlbs74OgvE2upms',
+          gasDeploymentUrl: 'https://script.google.com/macros/s/AKfycbwK2MD6O2YVPmrkI4c9XB9feTOYyKn2nx74M3Vd3eyQL35JzBNRjwr_di3LIgKlJI1tHA/exec',
+          driveFolderId: '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5',
+          autoSync: true,
+          isConnected: true
+        });
+
+        localStorage.setItem('sijajul_drive_logos_permanen_v28', 'true');
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sijajul_data_updated'));
+        }
       }
 
       // Pastikan deduplikasi data barang dan stok berjalan otomatis untuk semua browser

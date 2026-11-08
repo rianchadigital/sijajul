@@ -97,16 +97,29 @@ export const resolveLogoImageSrc = (
   logoInput?: string,
   fallbackType: 'JAYA_RAYA' | 'KESEHATAN' = 'JAYA_RAYA'
 ): string => {
-  const defaultFallback = fallbackType === 'JAYA_RAYA'
+  const officialLogo = fallbackType === 'JAYA_RAYA'
     ? (EMBEDDED_LINK_LOGO_JAYA_RAYA || DEFAULT_LOGO_JAYA_RAYA)
     : (EMBEDDED_LINK_LOGO_KESEHATAN || DEFAULT_LOGO_KESEHATAN);
 
   if (!logoInput || !String(logoInput).trim()) {
-    return defaultFallback;
+    return officialLogo;
   }
 
   const trimmed = String(logoInput).trim();
   const driveId = extractDriveFileId(trimmed);
+
+  // Jika input adalah ID Google Drive atau link folder Drive resmi (1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5):
+  // Langsung kembalikan logo resmi vektor DKI / Bakti Husada sehingga tampil tajam, permanen,
+  // dan bebas dari isu 302 login redirect Google Drive di browser mana pun
+  if (
+    driveId === DEFAULT_DRIVE_ASSET_ID || 
+    driveId === '1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5' || 
+    trimmed.includes('1sx65Ff-VWSPYeEoC2ZcNa9PUDAz-htk5') ||
+    trimmed.includes('1sx65Ff')
+  ) {
+    return officialLogo;
+  }
+
   if (driveId) {
     return `https://lh3.googleusercontent.com/d/${driveId}`;
   }
@@ -120,6 +133,6 @@ export const resolveLogoImageSrc = (
     return trimmed;
   }
 
-  return defaultFallback;
+  return officialLogo;
 };
 
